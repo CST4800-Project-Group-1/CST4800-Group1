@@ -1,1 +1,75 @@
+# =========================
+# Node.js / TypeScript
+# =========================
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+out/
+.next/
+
+# TypeScript
+*.tsbuildinfo
+
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# C / C++
+# =========================
+*.o
+*.obj
+*.exe
+*.out
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+
+# CMake
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+.vs/
+
+# Visual Studio
+*.sln
+*.vcxproj.user
+*.VC.db
+*.VC.opendb
+*.suo
+*.user
+
+# =========================
+# Operating System
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Logs / Temporary Files
+# =========================
+*.log
+*.tmp
+*.temp
+*.swp
+*~

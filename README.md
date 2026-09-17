@@ -1,24 +1,46 @@
-# PC Part Picker
+# Team Branches
 
-## Project Description
+Each team member should work on their assigned feature branch.
 
-PC Part Picker is a website that helps users choose PC parts, check compatibility, compare prices, and view a completed computer build.
+| Team Member | Branch |
+|---|---|
+| Vladislav Belyavskiy | `feature/vladislav-belyavskiy` |
+| Yaasir Khan | `feature/yaasir-khan` |
+| Justin Calvin | `feature/justin-calvin` |
+| Qi Xin Chen | `feature/qixinchen` |
+| Micquaya Gibson | `feature/micquaya-gibson` |
+| Howard Heaven | `feature/heaven-howard` |
 
-The project uses:
-- TypeScript for the frontend
-- C++ for the backend
+Erick Arias serves as Project Manager / Scrum Master and reviewer.
 
-## Project Structure
+## Git Workflow
 
-```text
-PC-Part-Picker/
-├── frontend/
-│   ├── src/
-│   │   └── index.ts
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── backend/
-│   └── main.cpp
-│
-└── README.md
+1. Do not work directly on `main`.
+2. Switch to your assigned feature branch.
+3. Pull the latest changes before starting work.
+4. Make and test your changes.
+5. Commit your changes with a clear commit message.
+6. Push changes to your feature branch.
+7. Open a Pull Request from your feature branch into `main`.
+8. Wait for the required reviews and resolve any requested changes.
+9. Approved Pull Requests are squash-merged into `main`.
+
+## Pull Request Rules
+
+- All changes to `main` must go through a Pull Request.
+- Do not merge your own Pull Request.
+- Two approvals from the `Reviewers` team are required.
+- All review conversations must be resolved before merging.
+- If new commits are pushed after approval, the Pull Request must be reviewed again.
+- Do not force-push to `main`.
+- Do not delete `main`.
+
+## Project Management
+
+Project tasks, user stories, bugs, and sprint work are tracked in Jira.
+
+When possible, include the Jira issue key in branch work, commits, and Pull Requests.
+
+Example:
+
+`CST-15 Add CPU compatibility validation`
