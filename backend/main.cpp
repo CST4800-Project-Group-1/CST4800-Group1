@@ -1,31 +1,42 @@
 #include <iostream>
-#include "compatibilityCheck.hpp"
-#include "powerEstimate.hpp"
+#include <fstream>
+#include <string>
+#include <sstream>
 
-int main() {
-    std::cout << "PC Part Picker backend is running!\n\n";
+std::string loadCatalog() {
+    std::ifstream file("parts_catalog.json");
+    if (file.is_open()) {
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        return buffer.str();
+    }
+    
+    // Fallback if file isn't in working directory
+    return R"({
+      "cpu": [{"id": "cpu-1", "name": "AMD Ryzen 7 7800X3D", "socket": "AM5", "tdpWatts": 120}],
+      "motherboard": [{"id": "mobo-1", "name": "MSI MAG B650 TOMAHAWK WIFI", "socket": "AM5", "ramType": "DDR5"}],
+      "memory": [{"id": "ram-1", "name": "G.Skill Trident Z5 Neo 32 GB", "ramType": "DDR5", "count": 2, "tdpWatts": 10}],
+      "power-supply": [{"id": "psu-1", "name": "Corsair RM750e 750 W", "wattage": 750}]
+    })";
+}
 
-    // Sample System Components
-    CPU cpu{"Intel Core i7-13700K", "LGA1700", 125};
-    Motherboard mobo{"ASUS ROG Strix Z790", "LGA1700", "DDR5"};
-    RAM ram{"Corsair Vengeance", "DDR5", 2, 10};
-    GPU gpu{"NVIDIA RTX 4080", 320};
-    PSU psu{"Corsair RM750", 750};
+int main(int argc, char* argv[]) {
+    std::string category = "";
 
-    // 1. Run Compatibility Check
-    CompatibilityReport compat = validateCompatibility(cpu, mobo, ram);
-    std::cout << "=== COMPATIBILITY REPORT ===\n";
-    std::cout << "Compatible: " << (compat.isCompatible ? "YES" : "NO") << "\n";
-    for (const auto& err : compat.errorMessages) {
-        std::cout << "  [ERROR] " << err << "\n";
+    if (argc > 1) {
+        category = argv[1];
+    } else {
+        std::cout << "Enter part category (cpu, motherboard, memory, power-supply): ";
+        std::cin >> category;
     }
 
-    // 2. Run Power Estimation
-    PowerReport power = calculatePowerEstimate(cpu.tdpWatts, ram.tdpWatts, gpu, psu);
-    std::cout << "\n=== POWER ESTIMATION REPORT ===\n";
-    std::cout << "Estimated Load: " << power.totalEstimatedWattage << " W\n";
-    std::cout << "Recommended PSU: " << power.recommendedPSUWattage << " W\n";
-    std::cout << "Status: " << power.psuStatusMessage << "\n";
+    std::string catalogJson = loadCatalog();
+
+    if (category == "cpu" || category == "motherboard" || category == "memory" || category == "power-supply") {
+        std::cout << "{\"status\": \"success\", \"category\": \"" << category << "\", \"data\": " << catalogJson << "}\n";
+    } else {
+        std::cout << "{\"status\": \"error\", \"message\": \"Invalid category requested: '" << category << "'\"}\n";
+    }
 
     return 0;
 }

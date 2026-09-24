@@ -1,0 +1,18 @@
+{
+  "cpu": [
+    {"id": "cpu-1", "name": "AMD Ryzen 7 7800X3D", "socket": "AM5", "tdpWatts": 120},
+    {"id": "cpu-2", "name": "Intel Core i7-14700K", "socket": "LGA1700", "tdpWatts": 125}
+  ],
+  "motherboard": [
+    {"id": "mobo-1", "name": "MSI MAG B650 TOMAHAWK WIFI", "socket": "AM5", "ramType": "DDR5"},
+    {"id": "mobo-2", "name": "ASUS ROG STRIX Z790-E GAMING WIFI", "socket": "LGA1700", "ramType": "DDR5"}
+  ],
+  "memory": [
+    {"id": "ram-1", "name": "G.Skill Trident Z5 Neo 32 GB", "ramType": "DDR5", "count": 2, "tdpWatts": 10},
+    {"id": "ram-2", "name": "Corsair Vengeance LPX 16 GB", "ramType": "DDR4", "count": 2, "tdpWatts": 8}
+  ],
+  "power-supply": [
+    {"id": "psu-1", "name": "Corsair RM750e 750 W", "wattage": 750},
+    {"id": "psu-2", "name": "EVGA SuperNOVA 850 GT 850 W", "wattage": 850}
+  ]
+}

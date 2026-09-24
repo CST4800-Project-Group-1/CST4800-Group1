@@ -19,6 +19,7 @@ PC-Part-Picker/
 │   └── tsconfig.json
 │
 ├── backend/
-│   └── main.cpp
+│   ├── main.cpp
+│   └── parts_catalog.json
 │
 └── README.md
