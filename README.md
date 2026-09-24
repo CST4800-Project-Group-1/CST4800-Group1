@@ -27,6 +27,6 @@ PC-Part-Picker/
 
 ## SCUM-6
 - cd backend
-- g++ -std=c++11 main.cpp -o system_analyzer_api -lpthread -lws2_32 -lcrypt32
-- ./system_analyzer_api 
+- g++ -std=c++11 main.cpp -o backend -lpthread -lws2_32 -lcrypt32
+- ./backend 
 - http://localhost:8080/
