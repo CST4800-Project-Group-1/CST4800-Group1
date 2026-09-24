@@ -20,6 +20,6 @@ PC-Part-Picker/
 │
 ├── backend/
 │   ├── main.cpp
-│   └── parts_catalog.json
+│  
 │
 └── README.md
