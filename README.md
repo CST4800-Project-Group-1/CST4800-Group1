@@ -20,6 +20,13 @@ PC-Part-Picker/
 │
 ├── backend/
 │   ├── main.cpp
-│  
+│   ├── httplib.h
+│   └── parts_catalog.json
 │
 └── README.md
+
+## SCUM-6
+- cd backend
+- g++ -std=c++11 main.cpp -o system_analyzer_api -lpthread -lws2_32 -lcrypt32
+- ./system_analyzer_api 
+- http://localhost:8080/
