@@ -20,7 +20,7 @@ PC-Part-Picker/
 │
 ├── backend/
 ├── main.cpp
-├── parts_catalog.json   (Placed here once your teammate shares it)
+├── sample_parts.json
 └── include/
 │  ├── httplib.h
 │  └── nlohmann/
