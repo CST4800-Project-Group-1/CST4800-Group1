@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "framework": null,
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "functions": {"api/catalog.py": {"includeFiles": "backend/data/sample_parts.json"}},
+  "rewrites": [{"source": "/v1/parts", "destination": "/api/catalog"}]
+}
