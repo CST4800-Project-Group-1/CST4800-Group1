@@ -5,6 +5,8 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <cctype>
+#include <utility>
 
 using json = nlohmann::json;
 
@@ -21,13 +23,24 @@ std::string to_lower(std::string s) {
 bool loadCatalog() {
     std::ifstream file("sample_parts.json");
     if (!file.is_open()) {
-        std::cerr << "[Warning] 'sample_parts.json' not found. API will return 503 until the file is placed." << std::endl;
+        std::cerr << "[Error] 'sample_parts.json' not found in the current directory. Start the server from backend/." << std::endl;
         return false;
     }
     try {
-        file >> global_catalog;
+        json parsed_catalog;
+        file >> parsed_catalog;
+        const bool valid_shape = parsed_catalog.is_array()
+            || (parsed_catalog.is_object() && parsed_catalog.contains("parts")
+                && parsed_catalog["parts"].is_array());
+        if (!valid_shape) {
+            global_catalog = json();
+            std::cerr << "[Error] Catalog must be an array or an object containing a parts array." << std::endl;
+            return false;
+        }
+        global_catalog = std::move(parsed_catalog);
         std::cout << "[Success] Parts catalog loaded successfully!" << std::endl;
     } catch (const std::exception& e) {
+        global_catalog = json();
         std::cerr << "[Error] Failed to parse JSON catalog: " << e.what() << std::endl;
         return false;
     }
@@ -46,6 +59,17 @@ int main() {
     loadCatalog();
 
     httplib::Server svr;
+    svr.set_socket_options([](socket_t socket) {
+#ifdef _WIN32
+        if (!httplib::set_socket_opt(socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, 1)) {
+            std::cerr << "[Error] Could not reserve port exclusively." << std::endl;
+        }
+#else
+        if (!httplib::set_socket_opt(socket, SOL_SOCKET, SO_REUSEADDR, 1)) {
+            std::cerr << "[Warning] Could not enable socket address reuse." << std::endl;
+        }
+#endif
+    });
 
     // Handle preflight OPTIONS requests for CORS
     svr.Options(R"(/.*)", [](const httplib::Request&, httplib::Response& res) {
@@ -146,7 +170,10 @@ int main() {
 
     // Start server on port 8080
     std::cout << "Starting 3D Parts Catalog API on http://localhost:8080 ..." << std::endl;
-    svr.listen("0.0.0.0", 8080);
+    if (!svr.listen("0.0.0.0", 8080)) {
+        std::cerr << "[Error] Could not listen on port 8080. Check whether another process is using it." << std::endl;
+        return 1;
+    }
 
     return 0;
 }
