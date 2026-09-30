@@ -5,58 +5,36 @@
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <array>
-#include <cctype>
 
 using json = nlohmann::json;
 
+// Global catalog storage loaded from the teammate's JSON file
 json global_catalog;
 
+// Helper function to convert strings for case-insensitive category matching
 std::string to_lower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return std::tolower(c); });
     return s;
 }
 
+// Function to read the sample catalog file provided by your team
 bool loadCatalog() {
-    // Support launching from either the repository root or backend/.
-    const std::array<const char*, 2> paths = {
-        "backend/sample_parts.json", "sample_parts.json"
-    };
-    std::ifstream file;
-    std::string loaded_path;
-    for (const char* path : paths) {
-        file.open(path);
-        if (file.is_open()) {
-            loaded_path = path;
-            break;
-        }
-        file.clear();
-    }
+    std::ifstream file("sample_parts.json");
     if (!file.is_open()) {
-        std::cerr << "[Error] Sample catalog not found (expected backend/sample_parts.json or sample_parts.json)." << std::endl;
+        std::cerr << "[Warning] 'sample_parts.json' not found. API will return 503 until the file is placed." << std::endl;
         return false;
     }
     try {
-        json parsed;
-        file >> parsed;
-        const json* parts = parsed.is_array() ? &parsed
-            : (parsed.is_object() && parsed.contains("parts") && parsed["parts"].is_array()
-                ? &parsed["parts"] : nullptr);
-        if (parts == nullptr) {
-            std::cerr << "[Error] Catalog must be an array or an object containing a parts array." << std::endl;
-            return false;
-        }
-        const std::size_t part_count = parts->size();
-        global_catalog = std::move(parsed);
-        std::cout << "[Success] Loaded " << part_count << " parts from " << loaded_path << std::endl;
+        file >> global_catalog;
+        std::cout << "[Success] Parts catalog loaded successfully!" << std::endl;
     } catch (const std::exception& e) {
-        global_catalog = json();
         std::cerr << "[Error] Failed to parse JSON catalog: " << e.what() << std::endl;
         return false;
     }
     return true;
 }
 
+// Helper to set CORS headers so the 3D frontend can connect to your API
 void set_cors_headers(httplib::Response& res) {
     res.set_header("Access-Control-Allow-Origin", "*");
     res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -64,15 +42,18 @@ void set_cors_headers(httplib::Response& res) {
 }
 
 int main() {
+    // Load catalog on startup
     loadCatalog();
 
     httplib::Server svr;
 
+    // Handle preflight OPTIONS requests for CORS
     svr.Options(R"(/.*)", [](const httplib::Request&, httplib::Response& res) {
         set_cors_headers(res);
         res.status = 200;
     });
 
+    // 1. Root / Health Check Endpoint
     svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
         set_cors_headers(res);
         json response;
@@ -81,11 +62,12 @@ int main() {
         res.set_content(response.dump(), "application/json");
     });
 
+    // 2. GET /v1/parts - Retrieve the full catalog
     svr.Get("/v1/parts", [](const httplib::Request&, httplib::Response& res) {
         set_cors_headers(res);
         
         if (global_catalog.empty()) {
-            loadCatalog(); 
+            loadCatalog(); // Try reloading if file was just added
             if (global_catalog.empty()) {
                 json err;
                 err["error"] = "Catalog data is currently unavailable.";
@@ -103,6 +85,7 @@ int main() {
         res.set_content(response.dump(), "application/json");
     });
 
+    // 3. GET /v1/parts/{category} - Retrieve parts filtered by category
     svr.Get(R"(/v1/parts/([^/]+))", [](const httplib::Request& req, httplib::Response& res) {
         set_cors_headers(res);
 
@@ -121,6 +104,8 @@ int main() {
         std::string search_category = to_lower(category);
         json matching_parts = json::array();
 
+        // The sample catalog is an object with a "parts" array. Also accept a
+        // root array for catalogs exported in that simpler shape.
         const json* parts = nullptr;
         if (global_catalog.is_array()) {
             parts = &global_catalog;
@@ -138,6 +123,7 @@ int main() {
             }
         }
 
+        // Clean error handling if category is invalid or empty
         if (matching_parts.empty()) {
             json err;
             err["error"] = "Invalid category or no parts found for category: " + category;
@@ -158,11 +144,9 @@ int main() {
         res.set_content(response.dump(), "application/json");
     });
 
+    // Start server on port 8080
     std::cout << "Starting 3D Parts Catalog API on http://localhost:8080 ..." << std::endl;
-    if (!svr.listen("0.0.0.0", 8080)) {
-        std::cerr << "[Error] Failed to start server on port 8080." << std::endl;
-        return 1;
-    }
+    svr.listen("0.0.0.0", 8080);
 
     return 0;
 }

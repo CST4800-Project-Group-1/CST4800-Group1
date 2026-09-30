@@ -19,14 +19,17 @@ PC-Part-Picker/
 │   └── tsconfig.json
 │
 ├── backend/
-│   ├── main.cpp
-│   ├── httplib.h
-│   └── parts_catalog.json
+├── main.cpp
+├── parts_catalog.json   (Placed here once your teammate shares it)
+└── include/
+│  ├── httplib.h
+│  └── nlohmann/
+│     └── json.hpp
 │
 └── README.md
 
 ## SCUM-6
 - cd backend
-- g++ -std=c++11 main.cpp -o backend -lpthread -lws2_32 -lcrypt32
+- g++ -std=c++17 -Iinclude main.cpp -o backend.exe -lws2_32 -lcrypt32
 - ./backend 
-- http://localhost:8080/
+- http://localhost:8080/v1/parts
