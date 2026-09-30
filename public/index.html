@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BuildLab · PC Parts Explorer</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header><a class="brand" href="/">▦ <span>BuildLab</span></a><span class="team">CST 4800 · GROUP 1</span><a href="#build">Your build <span id="build-count">0</span></a></header>
+  <main>
+    <section class="hero"><div><p class="eyebrow">YOUR NEXT BUILD STARTS HERE</p><h1>Great builds.<br><span>One part at a time.</span></h1><p class="intro">Explore components, compare specifications, and put together your next PC.</p><div class="hero-meta"><span>21 sample components</span><span>7 categories</span><span>One build, your way</span></div></div><div class="machine" aria-hidden="true"><div class="case"><div class="fan">✳</div><div class="fan">✳</div><div class="gpu"></div><div class="power"></div></div><span>BUILD SOMETHING THAT’S YOURS.</span></div></section>
+    <p class="notice">Presentation demo · Products, prices, and availability are illustrative sample data. Compatibility and 3D visualization are planned features.</p>
+    <div class="workspace"><section class="catalog" aria-labelledby="catalog-title"><div class="section-heading"><div><p class="eyebrow">THE COMPONENT LIBRARY</p><h2 id="catalog-title">Find your next part</h2></div><span id="result-count" aria-live="polite">Loading catalog…</span></div>
+      <div class="controls"><label class="search">Search parts<input id="search" type="search" placeholder="Search by name, brand, or model"></label><label>Sort by<select id="sort"><option value="name">Name: A–Z</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option></select></label></div>
+      <nav id="categories" aria-label="Part categories"></nav><div id="status" role="status">Loading your components…</div><button id="retry" hidden>Try again</button><div id="parts" class="parts"></div>
+    </section><aside id="build" aria-labelledby="build-title"><p class="eyebrow">MAKE IT YOURS</p><h2 id="build-title">Your build</h2><p class="muted">Choose one component per category.</p><div id="build-items"></div><div class="total"><span>Estimated total</span><strong id="total">$0.00</strong></div><p class="fine">Sample prices · Compatibility has not been checked.</p><button id="export" class="primary" disabled>Download build</button><button id="clear" class="secondary" disabled>Clear build</button></aside></div>
+  </main><footer><span>BuildLab / CST 4800</span><span>Explore. Assemble. Make it yours.</span></footer>
+</body></html>
