@@ -5,7 +5,7 @@ cd "$repo_root"
 build_dir="$(mktemp -d)"
 trap 'rm -rf "$build_dir"' EXIT
 compiler="${CXX:-g++}"
-"$compiler" -std=c++17 -Wall -Wextra -Werror -pedantic backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o "$build_dir/catalog"
+"$compiler" -std=c++17 -Wall -Wextra -Werror -pedantic backend/catalog_main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o "$build_dir/catalog"
 "$compiler" -std=c++17 -Wall -Wextra -Werror -pedantic backend/tests/catalog_test.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o "$build_dir/catalog_test"
 "$build_dir/catalog_test"
 "$build_dir/catalog"
