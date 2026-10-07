@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="parts-api-url" content="http://localhost:8080">
+    <title>PC Parts Catalog</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="module" src="dist/index.js"></script>
+</head>
+<body>
+    <main>
+        <header><p class="eyebrow">PC PART PICKER</p><h1>Find your next component</h1>
+            <p>Browse parts and compare the specifications for your build.</p>
+        </header>
+        <section aria-label="Catalog status">
+            <p id="status" role="status" aria-live="polite">Loading parts…</p>
+            <p id="api-error" role="alert" hidden></p>
+            <button id="reload" type="button">Reload catalog</button>
+        </section>
+        <form id="filters" aria-label="Search and filter parts">
+            <label class="search">Search parts<input id="search" type="search" placeholder="Name, model, socket or specification"></label>
+            <label>Category<select id="category"><option value="">All categories</option></select></label>
+            <label>Manufacturer<select id="manufacturer"><option value="">All manufacturers</option></select></label>
+            <label>Availability<select id="availability"><option value="">Any availability</option><option value="in_stock">In stock</option><option value="out_of_stock">Out of stock</option><option value="preorder">Preorder</option></select></label>
+            <label>Maximum price (USD)<input id="max-price" type="number" min="0" step="0.01" placeholder="No limit"></label>
+            <button id="clear" type="button">Clear filters</button>
+        </form>
+        <p id="filter-error" role="alert" hidden>Enter a valid maximum price of zero or more.</p>
+        <p id="result-count" role="status" aria-live="polite"></p>
+        <section id="parts" class="grid" aria-label="Parts catalog" aria-busy="true"></section>
+        <noscript>Enable JavaScript to load the parts catalog.</noscript>
+    </main>
+</body>
+</html>

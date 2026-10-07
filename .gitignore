@@ -1,1 +1,4 @@
 node_modules/
+frontend/dist/
+backend/backend.exe
+backend/catalog-api
