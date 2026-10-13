@@ -312,3 +312,33 @@ shared fields and category-specific specifications. The C++ backend validates
 and loads the sample data, and a matching JSON file gives the API and frontend
 reliable data while the external source is being evaluated. The technical fields
 can later support searching, filtering and compatibility checks.
+
+
+## SCRUM-15: selected CPU and motherboard sockets
+
+The existing BuildLab presentation website and API remain unchanged apart from
+a socket status panel in the build sidebar. Deployment still uses the repository
+root, `public/`, and the existing Vercel routing. No catalog-loader integration,
+API change, or alternate website is part of this ticket.
+
+Run the presentation application and its existing API adapter together with
+`python demo_server.py`, then open http://localhost:8081. The separate frontend
+and C++ application setup instructions above remain available.
+
+The panel shows waiting when either part is missing, a socket match, a mismatch
+naming both sockets, or unknown. It recomputes after add, replace, remove, clear
+and refresh. It never treats unknown socket data or an unavailable catalog as
+compatible. Browser storage retains IDs, not decisions; fresh catalog records
+are used on refresh. Downloaded builds include a socket-only result while full
+`compatibilityChecked` remains false.
+
+The isolated preview rule in `public/socket-compatibility.js` is pending Howard's
+SCRUM-9 confirmation and Vlad's release review for the October 14 checkpoint.
+It currently recognizes only the seed's AM5/LGA1700 sockets. The proposed
+contract and owner handoff are in `docs/socket-result-contract.md`.
+
+Run socket rule tests with Node.js 22 or newer:
+`node --test tests/socket-compatibility.test.mjs`.
+For browser acceptance, add DemoCore C6 and DemoBoard B650 ATX (match); replace
+the board with ExampleBoard B760 DDR4 (AM5/LGA1700 mismatch); remove either part
+(waiting); clear and refresh; confirm unknown or unavailable data never matches.
