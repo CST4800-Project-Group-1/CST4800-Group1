@@ -4,33 +4,64 @@
 
 The deployed website is served from the repository root by Vercel. The frontend
 requests `GET /v1/parts`; `vercel.json` rewrites that path to the Python function
-`api/catalog.py`. The function reads `backend/data/sample_parts.json` (included
-in the function bundle by `vercel.json`) and returns it inside the
-`{"status":"success","data":...}` response envelope. The browser therefore
-receives the checked-in sample catalog through the Python adapter.
+`api/catalog.py`. The October 14 sprint status reports that the deployed adapter
+still serves sample data. The working-tree ZenRows/B&H fetcher has since passed
+a local API request, but its deployment has not been verified. Do not describe
+the deployed site as using live ZenRows data until an endpoint check confirms it.
 
-`backend/main.cpp` is a separate C++ HTTP server listening on port 8080. It
-reads `backend/sample_parts.json` from its working directory and serves the same
-catalog contract locally. It is not currently part of Vercel's request path and
-has only been checked as a separate service. A successful C++ test does not
-verify a Vercel deployment.
+The combined `backend/main.cpp` executable runs the C++ HTTP server on port
+8080 by default and retains the catalog CLI as `--catalog` and `--catalog-json`
+modes. Start it from `backend/`; HTTP mode reads `data/sample_parts.json` and
+serves the catalog contract locally. It is not currently part of
+Vercel's request path; checking this server does not verify a Vercel deployment.
 
-## Selected data integration
+## Candidate data integration
 
-ZenRows is the selected provider for the upcoming sourced-catalog integration.
-The intended flow is to fetch permitted upstream product pages/data with
-ZenRows in a server-side ingestion step, normalize and validate results into
-the existing catalog schema, then publish a generated catalog artifact for the
-site API to serve. Credentials stay server-side and out of source control. The
-frontend continues to consume the existing `/v1/parts` contract.
+ZenRows is the server-side fetch service; B&H Photo is the live catalog source.
+The integration uses B&H's public category listing pages for CPU, motherboard,
+graphics card, memory, internal SSD, power supply and case products. The importer
+uses deterministic HTML parsing and does not use AI extraction. Each category is
+limited to the first 25 products with a parseable current USD price. Product
+cards link back to their B&H listing.
 
-Coordinate this approach and its ingestion/deployment ownership with Vlad
-before changing Vercel configuration or replacing the Python adapter. This
-document records the selected approach; it does not claim ZenRows ingestion is
-implemented or deployed. Until that coordination and wiring happen, the live
-site continues to use the checked-in sample JSON through Python.
+The candidate reads `ZENROWS_API_KEY` from its process environment. Never put
+the key in frontend code or source control. For local use, run
+`python demo_server.py`; it reads that environment variable or the ignored
+`.zenrows/secrets.json` CLI secret file and serves the site on loopback port
+8081. The key in that local file is not available to Vercel. Vercel would need the
+key in the project's server-side Environment Variables after the team approves
+the deployment change. A local `GET /v1/parts` returned HTTP 200 with
+`isSampleData: false`, 175 products and 25 products in each of the seven
+categories. Basic mode returned ZenRows `RESP001`; JavaScript rendering without
+a product wait returned a browser-update page. Adding ZenRows' `wait_for`
+selector for B&H product cards returned the listings at a reported `$0.005`
+request cost. The fetcher uses this rendered retry when basic mode is blocked
+or returns no parseable products. Two concurrent category fetches avoided the
+earlier 429 response from a seven-request burst. Successful results are cached
+for one hour. The first local request in this sandbox failed because outbound
+HTTPS was blocked; the successful catalog request ran with external network
+access. Deployment remains unverified.
+
+The Vercel config still bundles the sample JSON. Coordinate with Vlad before
+changing deployment configuration. The separate local C++ service in
+`backend/main.cpp` remains a sample-data demo and is not the live website API.
 
 ## Combined checkout health check
+
+The current C++ entry point is `backend/main.cpp`. Build it with the catalog
+model and seed sources; run with no arguments to start the HTTP API, or pass
+`--catalog` / `--catalog-json` for the former catalog CLI modes. For example,
+from the repository root:
+
+```powershell
+g++ -std=c++17 -pthread -Ibackend/include backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o api.exe -lws2_32 -lcrypt32
+Push-Location backend
+..\api.exe --catalog
+Pop-Location
+```
+
+The checks below are the recorded pre-combination checkout results and
+commands.
 
 These checks ran on Windows against combined checkout commit
 `752e6107ab4b4c5d7a6f5d65fe378b19878eeefa` (`feature/qixin-chen`, containing the
@@ -55,7 +86,8 @@ JSON escaping checks passed”; JSON export parsed and contained 21 parts, as di
 ### C++ HTTP service
 
 The server compiled with the Windows Winsock libraries and served a temporary
-working copy of `backend/sample_parts.json`:
+working copy of the then-current sample JSON. This recorded check predates the
+move to the canonical `backend/data/sample_parts.json` path:
 
 ```powershell
 g++ -std=c++17 -pthread -Ibackend/include backend/main.cpp -o "$env:TEMP\cst4800-api-check\api.exe" -lws2_32 -lcrypt32

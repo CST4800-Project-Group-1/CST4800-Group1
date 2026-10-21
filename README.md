@@ -1,22 +1,21 @@
 # PC Part Picker
 
-CST4800 Group 1 is building a PC component browsing and build-selection application. The frontend is TypeScript; the local catalog API is C++17. All current parts, prices and availability are illustrative sample data. Compatibility checks and 3D visualization are future work.
+CST4800 Group 1 is building a PC component browsing and build-selection application. The frontend is TypeScript; the local catalog API is C++17. As of the October 14 sprint check, the deployed site uses a Python adapter and sample catalog data. The working-tree Python adapter has returned live B&H catalog data through ZenRows locally; deployment is not confirmed. Compatibility checks and 3D visualization are future work.
 
 ## SCRUM-6: C++ Parts Catalog API (Qi)
 
-backend/main.cpp is the HTTP server. It uses backend/include/httplib.h and backend/include/nlohmann/json.hpp. Start it from backend so it can find sample_parts.json.
+`backend/main.cpp` combines the C++ HTTP server and catalog CLI. Run it without arguments for the API; use `--catalog` for the validated summary or `--catalog-json` for JSON export. Start the HTTP server from `backend/`; it reads the canonical `backend/data/sample_parts.json` file.
 
 Linux/macOS:
 ```sh
-cd backend
-g++ -std=c++17 -pthread -Iinclude main.cpp -o /tmp/pc-parts-api
-/tmp/pc-parts-api
+g++ -std=c++17 -pthread -Ibackend/include backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o /tmp/pc-parts-api
+(cd backend && /tmp/pc-parts-api)
 ```
 
 Windows (MinGW-w64):
 ```powershell
+g++ -std=c++17 -pthread -Ibackend/include backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o backend/backend.exe -lws2_32 -lcrypt32
 cd backend
-g++ -std=c++17 -Iinclude main.cpp -o backend.exe -lws2_32 -lcrypt32
 .\backend.exe
 ```
 
@@ -36,21 +35,20 @@ The catalog is loaded before the request threads start and is read-only during r
 - - backend/catalog/parts_catalog.cpp: validation and JSON export.
 - - backend/catalog/sample_catalog.cpp: canonical native seed with 21 fictional parts, three per category.
 - - backend/data/sample_parts.json: canonical JSON export.
-- - backend/catalog_main.cpp: separate command-line catalog demo/export.
+- - backend/main.cpp: HTTP server and `--catalog` / `--catalog-json` command-line modes.
 - - backend/tests/catalog_test.cpp and backend/tests/check_catalog.sh: validation, JSON escaping, field/category checks and seed/export parity.
 
-The catalog CLI is separate from the HTTP server so both teammates’ deliverables remain usable. From the repository root:
+The catalog CLI modes use the same executable as the HTTP server. From the repository root:
 ```sh
-g++ -std=c++17 -Wall -Wextra -Werror -pedantic backend/catalog_main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o /tmp/pc-parts-catalog
-/tmp/pc-parts-catalog 
-/tmp/pc-parts-catalog --catalog-json
+g++ -std=c++17 -Wall -Wextra -Werror -pedantic -pthread -Ibackend/include backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o /tmp/pc-parts-api
+/tmp/pc-parts-api --catalog
+/tmp/pc-parts-api --catalog-json
 bash backend/tests/check_catalog.sh
 ```
 
-Regenerate both JSON copies after editing the seed:
+Regenerate the canonical JSON export after editing the seed:
 ```sh
-/tmp/pc-parts-catalog --catalog-json > backend/data/sample_parts.json
-cp backend/data/sample_parts.json backend/sample_parts.json
+/tmp/pc-parts-api --catalog-json > backend/data/sample_parts.json
 bash backend/tests/check_catalog.sh
 ```
 
@@ -62,6 +60,32 @@ The envelope is {schemaVersion: 1, isSampleData: true, parts: [...]}. Each part 
   
   These fields can support future compatibility rules, but do not verify complete compatibility: BIOS, connectors, cooler clearance and power headroom need separate work.
   
-  ## Presentation website
-  
-  The presentation frontend and Vercel Python API adapter are in PR #8 on demo/presentation-website. They use Justin’s canonical catalog; the hosted adapter is distinct from Qi’s local C++ process. See DEMO-TOUR.md on that branch for the website tour and deployment settings.
+## Live Parts API (ZenRows)
+
+The Python endpoint `api/catalog.py` fetches current product listings from B&H Photo through ZenRows. It returns up to 25 parsed products in each of seven categories and caches a successful catalog for one hour. ZenRows is the fetch service; the product listings come from B&H. This is separate from the C++ sample-data API described above.
+
+### Run locally
+
+1. Get a ZenRows API key and keep it private. For a local run, either set `ZENROWS_API_KEY` in your shell or create `.zenrows/secrets.json` (this local file is ignored by Git) with this shape:
+
+   ```json
+   {"apiKey": "YOUR_ZENROWS_API_KEY"}
+   ```
+
+2. From the repository root, start the local website and API adapter:
+
+   ```powershell
+   python demo_server.py
+   ```
+
+3. Open `http://localhost:8081` or request the API directly:
+
+   ```powershell
+   Invoke-RestMethod http://localhost:8081/v1/parts
+   ```
+
+The endpoint is `GET /v1/parts`. Success returns `{status: "success", data: {schemaVersion: 1, isSampleData: false, source, generatedAt, parts: [...]}}`. Each part follows the shared data contract above. A missing key or fetch/parse failure returns HTTP 503 with an `error` field. Live product count and availability can change.
+
+### Deployment status
+
+The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. The working-tree adapter has returned live catalog results locally. The deployed site was last reported to use sample data, so verify deployment before claiming it uses ZenRows. A deployment would need `ZENROWS_API_KEY` configured as a server-side Vercel environment variable. Coordinate changes to deployment with Vlad first. See [the integration and health-check notes](docs/data-integration-and-health-check.md).

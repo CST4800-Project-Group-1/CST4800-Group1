@@ -1,5 +1,6 @@
 #include "httplib.h"
 #include <nlohmann/json.hpp>
+#include "catalog/parts_catalog.h"
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -14,9 +15,9 @@ std::string to_lower(std::string s) {
       return s;
 }
 bool loadCatalog() {
-      std::ifstream file("sample_parts.json");
+      std::ifstream file("data/sample_parts.json");
       if (!file.is_open()) {
-                std::cerr << "[Error] 'sample_parts.json' not found in the current directory. Start the server from backend/." << std::endl;
+                std::cerr << "[Error] 'data/sample_parts.json' not found. Start the server from backend/." << std::endl;
                 return false;
       }
       try {
@@ -43,7 +44,36 @@ void set_cors_headers(httplib::Response& res) {
    res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
    res.set_header("Access-Control-Allow-Headers", "Content-Type");
 }
-int main() {
+int run_catalog_cli(bool json_output) {
+   const auto parts = catalog::loadSampleCatalog();
+   const auto errors = catalog::validateSampleCatalog(parts);
+   if (!errors.empty()) {
+      for (const auto& error : errors) std::cerr << error << std::endl;
+      return 1;
+   }
+   if (json_output) {
+      catalog::writeCatalogJson(std::cout, parts);
+      return 0;
+   }
+   std::cout << "PC Part Picker backend is running!" << std::endl;
+   std::cout << "Validated " << parts.size() << " sample parts." << std::endl;
+   for (int i = 0; i < 7; ++i) {
+      const auto category = static_cast<catalog::Category>(i);
+      int count = 0;
+      for (const auto& part : parts) if (part.category == category) ++count;
+      std::cout << catalog::categoryName(category) << ": " << count << std::endl;
+   }
+   return 0;
+}
+
+int main(int argc, char* argv[]) {
+   if (argc > 1) {
+      const std::string option = argv[1];
+      if (argc == 2 && option == "--catalog") return run_catalog_cli(false);
+      if (argc == 2 && option == "--catalog-json") return run_catalog_cli(true);
+      std::cerr << "Usage: " << argv[0] << " [--catalog|--catalog-json]" << std::endl;
+      return 2;
+   }
    loadCatalog();
    httplib::Server svr;
    svr.set_socket_options([](socket_t socket) {
