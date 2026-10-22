@@ -6,6 +6,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
+from http.server import BaseHTTPRequestHandler
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 from urllib.request import Request, urlopen
@@ -315,7 +316,7 @@ def _get_catalog():
         _CACHE["expires"] = time.time() + CACHE_SECONDS
         return catalog
 
-class handler:
+class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             category = parse_qs(urlsplit(self.path).query).get("category", [None])[0]
