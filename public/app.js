@@ -15,6 +15,7 @@ let parts = [];
 let category = 'all';
 let build = {};
 let isSampleData = true;
+const CATALOG_CACHE_KEY = 'buildlab-catalog-cache-v1';
 
 const $ = id => document.getElementById(id);
 const money = cents => new Intl.NumberFormat('en-US', {
@@ -148,7 +149,26 @@ function renderBuild() {
 }
 
 async function load() {
-  $('status').textContent = 'Loading your components…';
+  let cached = null;
+  try {
+    const stored = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || 'null');
+    if (Array.isArray(stored?.data?.parts)) cached = stored;
+  } catch {}
+
+  if (cached) {
+    parts = cached.data.parts;
+    isSampleData = cached.data.isSampleData === true;
+    for (const key of Object.keys(build)) {
+      if (!parts.some(part => part.category === key && part.id === build[key])) delete build[key];
+    }
+    save();
+    renderCategories();
+    renderBuild();
+    renderParts();
+    $('status').textContent = 'Showing your saved catalog while checking for current prices…';
+  } else {
+    $('status').textContent = 'Loading your components…';
+  }
   $('retry').hidden = true;
   try {
     const response = await fetch('/v1/parts');
@@ -157,6 +177,9 @@ async function load() {
     if (!Array.isArray(payload.data?.parts)) throw new Error('Catalog response is invalid');
     parts = payload.data.parts;
     isSampleData = payload.data.isSampleData === true;
+    try {
+      localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ data: payload.data, savedAt: Date.now() }));
+    } catch {}
     for (const key of Object.keys(build)) {
       if (!parts.some(part => part.category === key && part.id === build[key])) delete build[key];
     }
@@ -165,9 +188,11 @@ async function load() {
     renderBuild();
     renderParts();
   } catch {
-    $('status').textContent = 'The catalog could not load. Please try again.';
+    $('status').textContent = cached
+      ? 'Showing your saved catalog; the live refresh failed. Check your connection and try again.'
+      : 'The catalog could not load. Please try again.';
     $('retry').hidden = false;
-    $('result-count').textContent = 'Catalog unavailable';
+    if (!cached) $('result-count').textContent = 'Catalog unavailable';
   }
 }
 
