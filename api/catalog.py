@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urljoin
+from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
 ZENROWS_ENDPOINT = "https://api.zenrows.com/v1/"
@@ -29,6 +29,8 @@ CATEGORY_URLS = {
 
 _CACHE = {"expires": 0.0, "catalog": None}
 _CACHE_LOCK = threading.Lock()
+_CATEGORY_CACHE = {}
+_CATEGORY_CACHE_LOCK = threading.Lock()
 
 class _Element:
     def __init__(self, tag, attrs):
@@ -240,20 +242,50 @@ def _fetch_page(url, api_key, js_render=False):
     except (TimeoutError, URLError):
         raise RuntimeError("ZenRows request failed or timed out.") from None
 
+def _load_category(category, url, api_key):
+    try:
+        html = _fetch_page(url, api_key)
+        parts = _parse_category(html, category) if html else []
+        if not parts:
+            html = _fetch_page(url, api_key, js_render=True)
+            parts = _parse_category(html, category)
+    except RuntimeError as error:
+        raise RuntimeError(category + ": " + str(error)) from None
+    if not parts:
+        raise RuntimeError("No catalog products were parsed for category: " + category)
+    return parts
+
+
+def _category_catalog(category):
+    now = time.time()
+    cached = _CATEGORY_CACHE.get(category)
+    if cached and now < cached["expires"]:
+        return cached["catalog"]
+
+    with _CATEGORY_CACHE_LOCK:
+        now = time.time()
+        cached = _CATEGORY_CACHE.get(category)
+        if cached and now < cached["expires"]:
+            return cached["catalog"]
+        api_key = os.environ.get("ZENROWS_API_KEY", "").strip()
+        if not api_key:
+            raise RuntimeError("ZENROWS_API_KEY is not configured.")
+        parts = _load_category(category, CATEGORY_URLS[category], api_key)
+        catalog = {
+            "schemaVersion": 1,
+            "isSampleData": False,
+            "source": "B&H Photo via ZenRows",
+            "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "parts": parts,
+        }
+        _CATEGORY_CACHE[category] = {"expires": time.time() + CACHE_SECONDS, "catalog": catalog}
+        return catalog
+
+
 def _build_catalog(api_key):
     def load_category(item):
         category, url = item
-        try:
-            html = _fetch_page(url, api_key)
-            parts = _parse_category(html, category) if html else []
-            if not parts:
-                html = _fetch_page(url, api_key, js_render=True)
-                parts = _parse_category(html, category)
-        except RuntimeError as error:
-            raise RuntimeError(category + ": " + str(error)) from None
-        if not parts:
-            raise RuntimeError("No catalog products were parsed for category: " + category)
-        return parts
+        return _load_category(category, url, api_key)
 
     # Keep requests below typical provider/source burst limits.
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -286,10 +318,22 @@ def _get_catalog():
 class handler:
     def do_GET(self):
         try:
-            catalog = _get_catalog()
-            body = {"status": "success", "data": catalog}
-            status = 200
-            cache_control = "public, s-maxage=3600, stale-while-revalidate=86400"
+            category = parse_qs(urlsplit(self.path).query).get("category", [None])[0]
+            if category is not None:
+                if category not in CATEGORY_URLS:
+                    body = {"error": "Unsupported category.", "supported_categories": list(CATEGORY_URLS)}
+                    status = 404
+                    cache_control = "no-store"
+                else:
+                    catalog = _category_catalog(category)
+                    body = {"status": "success", "data": catalog}
+                    status = 200
+                    cache_control = "public, s-maxage=3600, stale-while-revalidate=86400"
+            else:
+                catalog = _get_catalog()
+                body = {"status": "success", "data": catalog}
+                status = 200
+                cache_control = "public, s-maxage=3600, stale-while-revalidate=86400"
         except RuntimeError as error:
             body = {"error": str(error)}
             status = 503

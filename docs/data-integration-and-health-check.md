@@ -4,10 +4,11 @@
 
 The deployed website is served from the repository root by Vercel. The frontend
 requests `GET /v1/parts`; `vercel.json` rewrites that path to the Python function
-`api/catalog.py`. The October 14 sprint status reports that the deployed adapter
-still serves sample data. The working-tree ZenRows/B&H fetcher has since passed
-a local API request, but its deployment has not been verified. Do not describe
-the deployed site as using live ZenRows data until an endpoint check confirms it.
+`api/catalog.py`. An October 22 Vercel Preview deployment succeeded, but the
+catalog did not load because the Preview environment still needs
+`ZENROWS_API_KEY`. The local ZenRows/B&H fetcher has returned live API results;
+do not describe the Preview or production site as using live data until its
+`/v1/parts` endpoint is verified.
 
 The combined `backend/main.cpp` executable runs the C++ HTTP server on port
 8080 by default and retains the catalog CLI as `--catalog` and `--catalog-json`
@@ -40,7 +41,15 @@ or returns no parseable products. Two concurrent category fetches avoided the
 earlier 429 response from a seven-request burst. Successful results are cached
 for one hour. The first local request in this sandbox failed because outbound
 HTTPS was blocked; the successful catalog request ran with external network
-access. Deployment remains unverified.
+access. The Preview deployment still needs the server-side key and a successful
+endpoint check.
+
+For faster first paint, the frontend now requests categories sequentially,
+starting with CPUs, and renders each response as it arrives. It uses
+`GET /v1/parts?category=<category>`; the full-catalog `GET /v1/parts` endpoint
+remains supported. The browser also shows its last saved catalog immediately
+while it refreshes category prices. Each category response has one-hour cache
+headers.
 
 The Vercel config still bundles the sample JSON. Coordinate with Vlad before
 changing deployment configuration. The separate local C++ service in

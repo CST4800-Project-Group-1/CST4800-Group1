@@ -16,6 +16,9 @@ let category = 'all';
 let build = {};
 let isSampleData = true;
 const CATALOG_CACHE_KEY = 'buildlab-catalog-cache-v1';
+const catalogCategories = Object.keys(labels);
+let catalogLoading = false;
+let loadedCategories = 0;
 
 const $ = id => document.getElementById(id);
 const money = cents => new Intl.NumberFormat('en-US', {
@@ -66,7 +69,9 @@ function renderParts() {
   $('result-count').textContent = `${visible.length} ${visible.length === 1 ? 'part' : 'parts'}`;
   const grid = $('parts');
   grid.replaceChildren();
-  $('status').textContent = visible.length ? '' : 'No parts match your search. Try another name or category.';
+  $('status').textContent = visible.length
+    ? (catalogLoading ? `Loading live prices (${loadedCategories}/${catalogCategories.length} categories)…` : '')
+    : (catalogLoading ? 'Loading catalog…' : 'No parts match your search. Try another name or category.');
 
   for (const part of visible) {
     const card = node('article', 'card');
@@ -150,6 +155,8 @@ function renderBuild() {
 
 async function load() {
   let cached = null;
+  catalogLoading = true;
+  loadedCategories = 0;
   try {
     const stored = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || 'null');
     if (Array.isArray(stored?.data?.parts)) cached = stored;
@@ -165,34 +172,57 @@ async function load() {
     renderCategories();
     renderBuild();
     renderParts();
-    $('status').textContent = 'Showing your saved catalog while checking for current prices…';
-  } else {
-    $('status').textContent = 'Loading your components…';
   }
   $('retry').hidden = true;
-  try {
-    const response = await fetch('/v1/parts');
-    if (!response.ok) throw new Error('Catalog request failed');
-    const payload = await response.json();
-    if (!Array.isArray(payload.data?.parts)) throw new Error('Catalog response is invalid');
-    parts = payload.data.parts;
-    isSampleData = payload.data.isSampleData === true;
+
+  const failedCategories = [];
+  for (const categoryName of catalogCategories) {
     try {
-      localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ data: payload.data, savedAt: Date.now() }));
-    } catch {}
-    for (const key of Object.keys(build)) {
-      if (!parts.some(part => part.category === key && part.id === build[key])) delete build[key];
+      const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}`);
+      if (!response.ok) throw new Error('Category request failed');
+      const payload = await response.json();
+      if (!Array.isArray(payload.data?.parts)) throw new Error('Category response is invalid');
+      parts = [
+        ...parts.filter(part => part.category !== categoryName),
+        ...payload.data.parts,
+      ];
+      isSampleData = payload.data.isSampleData === true;
+      loadedCategories += 1;
+      for (const key of Object.keys(build)) {
+        if (key === categoryName && !parts.some(part => part.category === key && part.id === build[key])) {
+          delete build[key];
+        }
+      }
+      save();
+      try {
+        localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({
+          data: {
+            schemaVersion: 1,
+            isSampleData,
+            source: payload.data.source,
+            generatedAt: payload.data.generatedAt,
+            parts,
+          },
+          savedAt: Date.now(),
+        }));
+      } catch {}
+      renderCategories();
+      renderBuild();
+      renderParts();
+    } catch {
+      failedCategories.push(categoryName);
     }
-    save();
-    renderCategories();
-    renderBuild();
-    renderParts();
-  } catch {
-    $('status').textContent = cached
-      ? 'Showing your saved catalog; the live refresh failed. Check your connection and try again.'
+  }
+
+  catalogLoading = false;
+  renderParts();
+  if (failedCategories.length) {
+    const failedLabels = failedCategories.map(name => labels[name]).join(', ');
+    $('status').textContent = parts.length
+      ? `Some categories did not load (${failedLabels}). Try again to refresh them.`
       : 'The catalog could not load. Please try again.';
     $('retry').hidden = false;
-    if (!cached) $('result-count').textContent = 'Catalog unavailable';
+    if (!parts.length) $('result-count').textContent = 'Catalog unavailable';
   }
 }
 

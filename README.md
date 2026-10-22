@@ -84,7 +84,7 @@ The Python endpoint `api/catalog.py` fetches current product listings from B&H P
    Invoke-RestMethod http://localhost:8081/v1/parts
    ```
 
-The endpoint is `GET /v1/parts`. Success returns `{status: "success", data: {schemaVersion: 1, isSampleData: false, source, generatedAt, parts: [...]}}`. Each part follows the shared data contract above. A missing key or fetch/parse failure returns HTTP 503 with an `error` field. Live product count and availability can change.
+The endpoint is `GET /v1/parts`. Success returns `{status: "success", data: {schemaVersion: 1, isSampleData: false, source, generatedAt, parts: [...]}}`. The site also requests `GET /v1/parts?category=cpu` (and the other supported category names) sequentially so it can show the first live category before the rest finish. Each part follows the shared data contract above. A missing key or fetch/parse failure returns HTTP 503 with an `error` field. Live product count and availability can change.
 
 ### Deployment status
 
