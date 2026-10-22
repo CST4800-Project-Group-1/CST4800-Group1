@@ -346,3 +346,4 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", cache_control)
         self.end_headers()
         self.wfile.write(payload)
+
