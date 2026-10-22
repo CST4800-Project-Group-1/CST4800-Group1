@@ -1,0 +1,23 @@
+{
+	"servers": {
+		"zenrows": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@zenrows/mcp"
+			],
+			"env": {
+				"ZENROWS_API_KEY": "${input:zenrows-key}"
+			}
+		}
+	},
+	"inputs": [
+		{
+			"type": "promptString",
+			"id": "zenrows-key",
+			"description": "Zenrows API key",
+			"password": true
+		}
+	]
+}
