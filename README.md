@@ -88,4 +88,5 @@ The endpoint is `GET /v1/parts`. Success returns `{status: "success", data: {sch
 
 ### Deployment status
 
-The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. The working-tree adapter has returned live catalog results locally. The deployed site was last reported to use sample data, so verify deployment before claiming it uses ZenRows. A deployment would need `ZENROWS_API_KEY` configured as a server-side Vercel environment variable. Coordinate changes to deployment with Vlad first. See [the integration and health-check notes](docs/data-integration-and-health-check.md).
+The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. Vlad confirmed the PR #9 Preview fetched live catalog results after its server-side `ZENROWS_API_KEY` was corrected. Production has not been verified. Do not commit or share the key. Coordinate deployment changes with Vlad. See [the integration and health-check notes](docs/data-integration-and-health-check.md).
+
