@@ -68,7 +68,7 @@ std::vector<std::string> validateCatalog(const std::vector<Part>& parts) {
                     && s.speedMtS > 0 && s.moduleCount > 0 && s.capacityGb % s.moduleCount == 0, "invalid RAM specifications");
             } else if constexpr (std::is_same_v<T, StorageSpecs>) {
                 require((s.storageType == "SSD" || s.storageType == "HDD") && s.capacityGb > 0
-                    && !s.interface.empty() && s.readSpeedMbS > 0 && s.writeSpeedMbS > 0, "invalid storage specifications");
+                    && !s.interfaceType.empty() && s.readSpeedMbS > 0 && s.writeSpeedMbS > 0, "invalid storage specifications");
             } else if constexpr (std::is_same_v<T, PowerSupplySpecs>) {
                 const std::set<std::string> ratings = {"80 PLUS Bronze", "80 PLUS Silver", "80 PLUS Gold", "80 PLUS Platinum", "80 PLUS Titanium"};
                 require(s.wattageW > 0 && ratings.count(s.efficiencyRating) > 0
@@ -148,7 +148,7 @@ void writeCatalogJson(std::ostream& output, const std::vector<Part>& parts) {
             } else if constexpr (std::is_same_v<T, RamSpecs>) {
                 s.string("memoryType", v.memoryType); s.number("capacityGb", v.capacityGb); s.number("speedMtS", v.speedMtS); s.number("moduleCount", v.moduleCount);
             } else if constexpr (std::is_same_v<T, StorageSpecs>) {
-                s.string("storageType", v.storageType); s.number("capacityGb", v.capacityGb); s.string("interface", v.interface);
+                s.string("storageType", v.storageType); s.number("capacityGb", v.capacityGb); s.string("interface", v.interfaceType);
                 s.number("readSpeedMbS", v.readSpeedMbS); s.number("writeSpeedMbS", v.writeSpeedMbS);
             } else if constexpr (std::is_same_v<T, PowerSupplySpecs>) {
                 s.number("wattageW", v.wattageW); s.string("efficiencyRating", v.efficiencyRating); s.string("modularType", v.modularType);
@@ -167,3 +167,4 @@ void writeCatalogJson(std::ostream& output, const std::vector<Part>& parts) {
     output << out.str();
 }
 } // namespace catalog
+
