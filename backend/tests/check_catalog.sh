@@ -5,10 +5,14 @@ cd "$repo_root"
 build_dir="$(mktemp -d)"
 trap 'rm -rf "$build_dir"' EXIT
 compiler="${CXX:-g++}"
-"$compiler" -std=c++17 -Wall -Wextra -Werror -pedantic backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o "$build_dir/catalog"
+extra_libs=()
+case "${OSTYPE:-}" in
+    msys*|cygwin*|mingw*) extra_libs=(-lws2_32 -lcrypt32) ;;
+esac
+"$compiler" -std=c++17 -Wall -Wextra -Werror -pedantic -pthread -Ibackend/include backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp "${extra_libs[@]}" -o "$build_dir/catalog"
 "$compiler" -std=c++17 -Wall -Wextra -Werror -pedantic backend/tests/catalog_test.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o "$build_dir/catalog_test"
 "$build_dir/catalog_test"
-"$build_dir/catalog"
+"$build_dir/catalog" --catalog
 "$build_dir/catalog" --catalog-json > "$build_dir/catalog.json"
 cmp backend/data/sample_parts.json "$build_dir/catalog.json"
 python3 - "$build_dir/catalog.json" <<'PY'
@@ -34,3 +38,4 @@ else
     status=$?
     test "$status" -eq 2
 fi
+

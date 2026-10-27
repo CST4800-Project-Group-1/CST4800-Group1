@@ -342,3 +342,20 @@ Run socket rule tests with Node.js 22 or newer:
 For browser acceptance, add DemoCore C6 and DemoBoard B650 ATX (match); replace
 the board with ExampleBoard B760 DDR4 (AM5/LGA1700 mismatch); remove either part
 (waiting); clear and refresh; confirm unknown or unavailable data never matches.
+
+## SCRUM-15 updated from SCRUM-16 — October 27, 2026
+
+Source: Qi's PR #9, commit 94337478fee0896f21eddda29be4159438a0925f.
+The root website now uses SCRUM-16's live category loader and Python catalog
+adapter while retaining SCRUM-15's socket status, selection updates and exports.
+Socket results require fresh CPU and motherboard categories. Cached or failed
+requests cannot establish compatibility; missing live socket specifications
+remain unknown. Exported isSampleData comes from the API.
+
+Set ZENROWS_API_KEY in the server environment and run `python demo_server.py`.
+Open http://localhost:8081. No key is committed. The source's external requests
+were not executed during this update. Local fixtures verified category loading,
+refresh failure and socket status. Run `node --test tests/*.test.mjs`.
+The C++ source and catalog check script also follow SCRUM-16; its server reads
+backend/data/sample_parts.json. Existing frontend TypeScript work is preserved.
+No merge, deployment or SCRUM-9 approval is implied.
