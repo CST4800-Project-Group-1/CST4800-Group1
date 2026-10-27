@@ -1,6 +1,6 @@
 # PC Part Picker
 
-CST4800 Group 1 is building a PC component browsing and build-selection application. The frontend is TypeScript; the local catalog API is C++17. As of the October 14 sprint check, the deployed site uses a Python adapter and sample catalog data. The working-tree Python adapter has returned live B&H catalog data through ZenRows locally; deployment is not confirmed. Compatibility checks and 3D visualization are future work.
+CST4800 Group 1 is building a PC component browsing and build-selection application. The frontend is TypeScript; the local catalog API is C++17. Vlad confirmed the PR #9 Vercel Preview fetched live B&H catalog data through ZenRows after its key was configured. Production deployment has not been verified. Compatibility checks and 3D visualization are future work.
 
 ## SCRUM-6: C++ Parts Catalog API (Qi)
 
@@ -84,8 +84,9 @@ The Python endpoint `api/catalog.py` fetches current product listings from B&H P
    Invoke-RestMethod http://localhost:8081/v1/parts
    ```
 
-The endpoint is `GET /v1/parts`. Success returns `{status: "success", data: {schemaVersion: 1, isSampleData: false, source, generatedAt, parts: [...]}}`. The site also requests `GET /v1/parts?category=cpu` (and the other supported category names) sequentially so it can show the first live category before the rest finish. Each part follows the shared data contract above. A missing key or fetch/parse failure returns HTTP 503 with an `error` field. Live product count and availability can change.
+The endpoint is `GET /v1/parts`. Success returns `{status: "success", data: {schemaVersion: 1, isSampleData: false, source, generatedAt, parts: [...]}}`. The site also requests `GET /v1/parts?category=cpu` (and the other supported category names) sequentially so it can show the first live category before the rest finish. Each part follows the shared data contract above. A missing key or fetch/parse failure returns HTTP 503 with an `error` field; the website reports the catalog unavailable and does not silently switch to sample prices. The C++ sample catalog remains available separately. Live product count and availability can change.
 
 ### Deployment status
 
-The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. The working-tree adapter has returned live catalog results locally. The deployed site was last reported to use sample data, so verify deployment before claiming it uses ZenRows. A deployment would need `ZENROWS_API_KEY` configured as a server-side Vercel environment variable. Coordinate changes to deployment with Vlad first. See [the integration and health-check notes](docs/data-integration-and-health-check.md).
+The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. Vlad confirmed the PR #9 Preview fetched live catalog results after its server-side `ZENROWS_API_KEY` was corrected. Production has not been verified. Do not commit or share the key. Coordinate deployment changes with Vlad. See [the integration and health-check notes](docs/data-integration-and-health-check.md).
+

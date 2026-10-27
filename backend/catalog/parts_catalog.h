@@ -32,7 +32,7 @@ struct RamSpecs {
 struct StorageSpecs {
     std::string storageType;
     int capacityGb;
-    std::string interface;
+    std::string interfaceType;
     int readSpeedMbS, writeSpeedMbS;
 };
 struct PowerSupplySpecs {
@@ -68,3 +68,4 @@ void writeCatalogJson(std::ostream& output, const std::vector<Part>& parts);
 
 } // namespace catalog
 #endif
+

@@ -106,11 +106,42 @@ def _price_cents(value):
     if "." in amount:
         whole, fraction = amount.split(".", 1)
         return int(whole) * 100 + int((fraction + "00")[:2])
-    # B&H renders cents in a separate superscript; HTML text becomes e.g. 17999.
-    digits = re.sub(r"\D", "", amount)
-    if len(digits) > 2:
-        return int(digits[:-2]) * 100 + int(digits[-2:])
-    return int(digits) * 100
+    # Without an explicit decimal or structurally separate cents, the number
+    # is a whole-dollar price (for example, $199 or $1,299).
+    return int(amount) * 100
+
+
+def _is_separate_cents_element(element):
+    classes = " ".join(element.classes()).casefold()
+    return element.tag in {"sup", "sub"} or any(
+        marker in classes for marker in ("cent", "fraction", "superscript")
+    )
+
+
+def _text_without_separate_cents(element):
+    chunks = []
+    for child in element.children:
+        if isinstance(child, _Element):
+            if not _is_separate_cents_element(child):
+                chunks.append(_text_without_separate_cents(child))
+        else:
+            chunks.append(child)
+    return "".join(chunks)
+
+
+def _price_cents_from_element(element):
+    cents_elements = [
+        child for child in element.descendants()
+        if _is_separate_cents_element(child)
+        and not any(_is_separate_cents_element(nested) for nested in child.descendants())
+    ]
+    if cents_elements:
+        cents_text = "".join(child.text() for child in cents_elements)
+        cents_digits = re.sub(r"\D", "", cents_text)
+        whole_cents = _price_cents(_text_without_separate_cents(element))
+        if whole_cents is not None and cents_digits:
+            return whole_cents + int((cents_digits + "00")[:2])
+    return _price_cents(element.text())
 
 def _manufacturer(name):
     brands = (
@@ -145,15 +176,11 @@ def _part_from_element(element, category):
     if not title:
         return None
 
-    current_price = next(
-        (
-            child.text()
-            for child in children
-            if any(value.startswith("price_") for value in child.classes())
-        ),
-        "",
+    price_element = next(
+        (child for child in children if any(value.startswith("price_") for value in child.classes())),
+        None,
     )
-    cents = _price_cents(current_price)
+    cents = _price_cents_from_element(price_element) if price_element else None
     if cents is None or cents <= 0:
         return None
 
@@ -346,4 +373,5 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", cache_control)
         self.end_headers()
         self.wfile.write(payload)
+
 
