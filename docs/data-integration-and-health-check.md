@@ -4,11 +4,11 @@
 
 The deployed website is served from the repository root by Vercel. The frontend
 requests `GET /v1/parts`; `vercel.json` rewrites that path to the Python function
-`api/catalog.py`. An October 22 Vercel Preview deployment succeeded, but the
-catalog did not load because the Preview environment still needs
-`ZENROWS_API_KEY`. The local ZenRows/B&H fetcher has returned live API results;
-do not describe the Preview or production site as using live data until its
-`/v1/parts` endpoint is verified.
+`api/catalog.py`. An October 22 Vercel Preview deployment initially failed
+because its environment lacked `ZENROWS_API_KEY`. On October 23, Vlad approved
+PR #9 after confirming the Preview fetched live data with the corrected key.
+Production deployment has not been verified; check its `/v1/parts` endpoint
+before claiming production uses live ZenRows data.
 
 The combined `backend/main.cpp` executable runs the C++ HTTP server on port
 8080 by default and retains the catalog CLI as `--catalog` and `--catalog-json`
@@ -41,8 +41,8 @@ or returns no parseable products. Two concurrent category fetches avoided the
 earlier 429 response from a seven-request burst. Successful results are cached
 for one hour. The first local request in this sandbox failed because outbound
 HTTPS was blocked; the successful catalog request ran with external network
-access. The Preview deployment still needs the server-side key and a successful
-endpoint check.
+access. The Preview was later confirmed working by Vlad after the key was
+configured. Production still needs its own endpoint check.
 
 For faster first paint, the frontend now requests categories sequentially,
 starting with CPUs, and renders each response as it arrives. It uses
@@ -51,11 +51,26 @@ remains supported. The browser also shows its last saved catalog immediately
 while it refreshes category prices. Each category response has one-hour cache
 headers.
 
+If ZenRows is unavailable or the key is missing, the endpoint returns HTTP 503
+and the website reports that the catalog could not load. It does not silently
+substitute sample prices. The C++ sample catalog remains a separate local demo.
+
 The Vercel config still bundles the sample JSON. Coordinate with Vlad before
 changing deployment configuration. The separate local C++ service in
 `backend/main.cpp` remains a sample-data demo and is not the live website API.
 
 ## Combined checkout health check
+
+### Python price parser regression tests
+
+From the repository root:
+
+```powershell
+python -B -m unittest api.test_catalog_prices
+```
+
+Result on October 27, 2026: all five tests passed, including `$199`, `$1,299`,
+`$199.99`, and separate dollar/cents HTML nodes.
 
 The current C++ entry point is `backend/main.cpp`. Build it with the catalog
 model and seed sources; run with no arguments to start the HTTP API, or pass
@@ -69,28 +84,29 @@ Push-Location backend
 Pop-Location
 ```
 
-The checks below are the recorded pre-combination checkout results and
-commands.
+### Build the combined C++ backend from the repository root
 
-These checks ran on Windows against combined checkout commit
-`752e6107ab4b4c5d7a6f5d65fe378b19878eeefa` (`feature/qixin-chen`, containing the
-merge from `main`). The local `main` ref points to an older initial setup, so
-these results describe the combined checkout, not that stale local ref.
-
-### Catalog build, test, and export
+`backend/main.cpp` now includes the HTTP server and catalog CLI. Build it with
+both catalog implementation files; `backend/catalog_main.cpp` is no longer used.
 
 ```powershell
 $tmp = Join-Path $env:TEMP 'cst4800-catalog-check'
 New-Item -ItemType Directory -Force $tmp | Out-Null
-g++ -std=c++17 -Wall -Wextra -Werror -pedantic backend/catalog_main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o (Join-Path $tmp 'catalog.exe')
+$sources = @('backend/main.cpp', 'backend/catalog/parts_catalog.cpp', 'backend/catalog/sample_catalog.cpp')
+g++ -std=c++17 -Wall -Wextra -Werror -pedantic -pthread -Ibackend/include $sources -o (Join-Path $tmp 'backend.exe') -lws2_32 -lcrypt32
 g++ -std=c++17 -Wall -Wextra -Werror -pedantic backend/tests/catalog_test.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o (Join-Path $tmp 'catalog-test.exe')
 & (Join-Path $tmp 'catalog-test.exe')
-& (Join-Path $tmp 'catalog.exe') --catalog-json
+& (Join-Path $tmp 'backend.exe') --catalog
+& (Join-Path $tmp 'backend.exe') --catalog-json | ConvertFrom-Json | ForEach-Object { $_.parts.Count }
 ```
 
-Result: both builds succeeded; `catalog_test` reported “Catalog validation and
-JSON escaping checks passed”; JSON export parsed and contained 21 parts, as did
-`backend/data/sample_parts.json`.
+The expected seed and JSON export each contain 21 parts. The Windows link flags
+are needed for the HTTP server. On October 27, 2026, this command was run from a
+fresh source snapshot. The combined backend and catalog test executable built,
+the test reported that validation and JSON escaping passed, `--catalog`
+validated 21 sample parts, and `--catalog-json` parsed with 21 parts. Both
+catalog implementation files must be compiled with `main.cpp`;
+`backend/catalog_main.cpp` is no longer used.
 
 ### C++ HTTP service
 
@@ -99,7 +115,7 @@ working copy of the then-current sample JSON. This recorded check predates the
 move to the canonical `backend/data/sample_parts.json` path:
 
 ```powershell
-g++ -std=c++17 -pthread -Ibackend/include backend/main.cpp -o "$env:TEMP\cst4800-api-check\api.exe" -lws2_32 -lcrypt32
+g++ -std=c++17 -pthread -Ibackend/include backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o "$env:TEMP\cst4800-api-check\api.exe" -lws2_32 -lcrypt32
 ```
 
 With the server running from that temporary directory, the following requests

@@ -32,7 +32,7 @@ struct RamSpecs {
 struct StorageSpecs {
     std::string storageType;
     int capacityGb;
-    std::string interface;
+    std::string interfaceType;
     int readSpeedMbS, writeSpeedMbS;
 };
 struct PowerSupplySpecs {
