@@ -142,3 +142,4 @@ The repository's Bash wrapper `backend/tests/check_catalog.sh` was not directly
 invokable in this Windows PowerShell environment because `bash` is not on PATH;
 its C++ build/test/export and JSON parsing checks were run directly as described
 above.
+

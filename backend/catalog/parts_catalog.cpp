@@ -167,3 +167,4 @@ void writeCatalogJson(std::ostream& output, const std::vector<Part>& parts) {
     output << out.str();
 }
 } // namespace catalog
+

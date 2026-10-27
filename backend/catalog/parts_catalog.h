@@ -68,3 +68,4 @@ void writeCatalogJson(std::ostream& output, const std::vector<Part>& parts);
 
 } // namespace catalog
 #endif
+
