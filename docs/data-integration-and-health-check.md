@@ -5,8 +5,8 @@
 The deployed website is served from the repository root by Vercel. The frontend
 requests `GET /v1/parts`; `vercel.json` rewrites that path to the Python function
 `api/catalog.py`. An October 22 Vercel Preview deployment initially failed
-because its environment lacked `ZENROWS_API_KEY`. On October 23, Vlad approved
-PR #9 after confirming the Preview fetched live data with the corrected key.
+because its environment lacked `ZENROWS_API_KEY`. On October 23, PR #9 was approved after the Preview was confirmed to fetch
+live data with the corrected key.
 Production deployment has not been verified; check its `/v1/parts` endpoint
 before claiming production uses live ZenRows data.
 
@@ -41,7 +41,7 @@ or returns no parseable products. Two concurrent category fetches avoided the
 earlier 429 response from a seven-request burst. Successful results are cached
 for one hour. The first local request in this sandbox failed because outbound
 HTTPS was blocked; the successful catalog request ran https://github.com/CST4800-Project-Group-1/CST4800-Group1/pull/10/conflict?name=docs%252Fdata-integration-and-health-check.md&base_oid=2918c7c90bfef7eefe2297e42bbc482671ebe986&head_oid=5349f37f670a23812e4cb13f5237bd5bf670c66dwith external network
-access. The Preview was later confirmed working by Vlad after the key was
+access. The Preview was later confirmed working after the key was
 configured. Production still needs its own endpoint check.
 
 For faster first paint, the frontend now requests categories sequentially,
@@ -55,7 +55,7 @@ If ZenRows is unavailable or the key is missing, the endpoint returns HTTP 503
 and the website reports that the catalog could not load. It does not silently
 substitute sample prices. The C++ sample catalog remains a separate local demo.
 
-The Vercel config still bundles the sample JSON. Coordinate with Vlad before
+The Vercel config still bundles the sample JSON. Coordinate with the team before
 changing deployment configuration. The separate local C++ service in
 `backend/main.cpp` remains a sample-data demo and is not the live website API.
 

@@ -1,9 +1,9 @@
-# CPU and motherboard socket result — proposed SCRUM-9 contract
+# CPU and motherboard socket result — preview contract
 
-Integration checkpoint: October 14, 2026. Rule owner: Howard (SCRUM-9).
-Release reviewer: Vlad. This contract and reference rule require their review;
+Integration checkpoint: October 14, 2026. Rule owner: Howard.
+This contract and reference rule require team review;
 no evidence of Howard's completed rule was found in the repository on October 13.
-This document does not claim that either approval has been given.
+This document does not claim that release approval has been given.
 
 `evaluateSocketCompatibility(cpu, motherboard)` accepts current catalog Part
 records, or null/undefined for a missing selection. Output is synchronous:
@@ -42,7 +42,7 @@ false because this rule does not check BIOS, RAM, clearance or complete builds.
 ## October 14 checkpoint
 
 Howard: confirm the four statuses, socket normalization, known-socket policy and
-rule implementation. Vlad: review PR #7 integration, root `public/` deployment,
+rule implementation. Team review covers PR #7 integration, root `public/` deployment,
 error handling, accessibility, refreshed selections and the release boundary.
 Merge and deploy only after the team release review. This preview must not
 replace the presentation website or imply complete build compatibility.

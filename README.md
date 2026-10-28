@@ -141,7 +141,7 @@ and loads the sample data, and a matching JSON file gives the API and frontend
 reliable data while the external source is being evaluated. The technical fields
 can later support searching, filtering and compatibility checks.
 
-CST4800 Group 1 is building a PC component browsing and build-selection application. The frontend is TypeScript; the local catalog API is C++17. Vlad confirmed the PR #9 Vercel Preview fetched live B&H catalog data through ZenRows after its key was configured. Production deployment has not been verified. Full compatibility checks and 3D visualization are future work.
+CST4800 Group 1 is building a PC component browsing and build-selection application. The frontend is TypeScript; the local catalog API is C++17. The PR #9 Vercel Preview was confirmed to fetch live B&H catalog data through ZenRows after its key was configured. Production deployment has not been verified. Full compatibility checks and 3D visualization are future work.
 
 ## SCRUM-6: C++ Parts Catalog API (Qi)
 
@@ -206,7 +206,7 @@ The endpoint is `GET /v1/parts`. Success returns `{status: "success", data: {sch
 
 ### Deployment status
 
-The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. Vlad confirmed the PR #9 Preview fetched live catalog results after its server-side `ZENROWS_API_KEY` was corrected. Production has not been verified. Do not commit or share the key. Coordinate deployment changes with Vlad. See [the integration and health-check notes](docs/data-integration-and-health-check.md).
+The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. The PR #9 Preview was confirmed to fetch live catalog results after its server-side `ZENROWS_API_KEY` was corrected. Production has not been verified. Do not commit or share the key. Coordinate deployment changes with the team. See [the integration and health-check notes](docs/data-integration-and-health-check.md).
 
 ## SCRUM-15 updated from SCRUM-16
 
@@ -223,4 +223,4 @@ were not executed during this update. Local fixtures verified category loading,
 refresh failure and socket status. Run `node --test tests/*.test.mjs`.
 The C++ source and catalog check script also follow SCRUM-16; its server reads
 backend/data/sample_parts.json. Existing frontend TypeScript work is preserved.
-No merge, deployment or SCRUM-9 approval is implied.
+No merge or deployment approval is implied.

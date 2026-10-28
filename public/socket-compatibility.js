@@ -1,4 +1,4 @@
-// Proposed SCRUM-9 contract. Howard must approve the rule before release.
+// Socket-only preview contract; full build compatibility remains unchecked.
 // This reference rule is limited to the two socket families in the Sprint 1 seed.
 const supportedSockets = new Set(['AM5', 'LGA1700']);
 const socketOf = part => typeof part?.specs?.socket === 'string' ? part.specs.socket.trim() : null;
