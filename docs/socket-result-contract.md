@@ -46,3 +46,23 @@ rule implementation. Vlad: review PR #7 integration, root `public/` deployment,
 error handling, accessibility, refreshed selections and the release boundary.
 Merge and deploy only after the team release review. This preview must not
 replace the presentation website or imply complete build compatibility.
+
+
+## October 28 combined-branch verification
+
+The current SCRUM-15 branch contains main's SCRUM-16 fixes via merge
+`387da1c`. `api/catalog.py` and `backend/main.cpp` are unchanged from main
+apart from line endings. Keep those corrected implementations.
+
+The live importer emits feature text, not verified `specs.socket` fields.
+Live CPU/motherboard selections must therefore remain unknown. Do not infer
+socket compatibility from product titles or feature strings. The notice in
+`public/index.html` states this limitation explicitly. Howard's scope
+confirmation was requested on PR #10 on October 28; no approval is assumed.
+Working live checks require verified API socket fields and an agreed socket rule.
+
+Category responses must have a successful envelope, the requested category,
+nonblank IDs/names, unique IDs, and positive safe integer prices before they
+can refresh the build or enable socket checks. Cached selections are retained
+until the corresponding category has successfully refreshed; incomplete cache
+snapshots cannot delete a saved selection before that request succeeds.

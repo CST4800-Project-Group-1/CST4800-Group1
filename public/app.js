@@ -171,9 +171,6 @@ async function load() {
   if (cached) {
     parts = cached.data.parts;
     isSampleData = cached.data.isSampleData === true;
-    for (const key of Object.keys(build)) {
-      if (!parts.some(part => part.category === key && part.id === build[key])) delete build[key];
-    }
     save();
     renderCategories();
     renderBuild();
@@ -187,7 +184,14 @@ async function load() {
       const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}`);
       if (!response.ok) throw new Error('Category request failed');
       const payload = await response.json();
-      if (!Array.isArray(payload.data?.parts)) throw new Error('Category response is invalid');
+      if (payload.status !== 'success' || !Array.isArray(payload.data?.parts)
+          || !payload.data.parts.every(part => part && part.category === categoryName
+            && typeof part.id === 'string' && part.id.trim()
+            && typeof part.name === 'string' && part.name.trim()
+            && Number.isSafeInteger(part.priceCents) && part.priceCents > 0)
+          || new Set(payload.data.parts.map(part => part.id)).size !== payload.data.parts.length) {
+        throw new Error('Category response is invalid');
+      }
       parts = [
         ...parts.filter(part => part.category !== categoryName),
         ...payload.data.parts,
