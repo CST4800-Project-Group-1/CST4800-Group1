@@ -1,6 +1,147 @@
 # PC Part Picker
 
-CST4800 Group 1 is building a PC component browsing and build-selection application. The frontend is TypeScript; the local catalog API is C++17. Vlad confirmed the PR #9 Vercel Preview fetched live B&H catalog data through ZenRows after its key was configured. Production deployment has not been verified. Compatibility checks and 3D visualization are future work.
+## Project Description
+
+PC Part Picker is a website that helps users choose PC parts, check compatibility, compare prices, and view a completed computer build.
+
+The project uses:
+- TypeScript for the frontend
+- C++ for the backend
+
+## Project Structure
+
+```text
+PC-Part-Picker/
+├── frontend/
+│   ├── src/
+│   │   └── index.ts
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── backend/
+│   └── main.cpp
+│
+└── README.md
+```
+
+## SCRUM-3: offline sample parts catalog
+
+The backend uses C++17 with the standard library only. 
+At the time SCRUM-3 was completed, no HTTP server, database, 
+API framework, or JSON library was configured. 
+The frontend is TypeScript;
+this ticket does not change it.
+
+- `backend/catalog/parts_catalog.h`: common Part model, typed specifications and loader/validation/export declarations.
+- `backend/catalog/sample_catalog.cpp`: canonical offline seed, with 21 fictional demo products (three per category).
+- `backend/catalog/parts_catalog.cpp`: validation and JSON serialization.
+- `backend/data/sample_parts.json`: ready-to-load JSON export for the API or frontend.
+- `backend/main.cpp`: startup demonstration and JSON export command.
+- `backend/tests/catalog_test.cpp` and `backend/tests/check_catalog.sh`: validation tests and export checks.
+
+All products, prices, inventory and specifications are illustrative sample data,
+not verified products, current retail offers or inventory. The JSON envelope is
+`{ "schemaVersion": 1, "isSampleData": true, "parts": [...] }`.
+
+### Build and run
+
+Run from the repository root. Requires a C++17 compiler; checks also require Bash
+and Python 3. The existing committed `backend/backend` binary is not replaced.
+
+```bash
+g++ -std=c++17 -Wall -Wextra -Werror -pedantic backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o /tmp/pc-parts-catalog
+/tmp/pc-parts-catalog
+/tmp/pc-parts-catalog --catalog-json
+bash backend/tests/check_catalog.sh
+```
+
+Edit the native seed and regenerate the JSON using the newly compiled executable:
+
+```bash
+/tmp/pc-parts-catalog --catalog-json > /tmp/sample_parts.json
+cp /tmp/sample_parts.json backend/data/sample_parts.json
+bash backend/tests/check_catalog.sh
+```
+
+The checks compare the exported JSON byte-for-byte against the committed file to
+prevent drift. The backend always validates the seed before demonstrating or
+exporting it. Validation reports errors and exits nonzero. Unsupported CLI options
+exit with status 2. Generic `validateCatalog` does not enforce minimum sample
+counts; `validateSampleCatalog` adds the requirement of three per category.
+
+### Data contract and units
+
+Every part has `id`, `name`, `category`, `manufacturer`, `model`, `priceCents`,
+`currency`, `imageUrl`, `imageIsPlaceholder`, `availability`, and `specs`.
+IDs are stable identifiers, not array indexes. `priceCents` is an integer in USD
+cents (15999 means $159.99); display price as `priceCents / 100`.
+`availability` is `in_stock`, `out_of_stock`, or `preorder`.
+`placeholder:<category>` is a marker, not a downloadable image URL. If
+`imageIsPlaceholder` is true, the frontend should display its own fallback image;
+real image URLs must use HTTPS.
+
+| Category | Fields inside `specs` |
+| --- | --- |
+| `cpu` | `socket`, `coreCount`, `threadCount`, `baseClockGhz`, `boostClockGhz`, `wattageW` |
+| `motherboard` | `socket`, `chipset`, `formFactor`, `memoryType`, `maxMemoryGb` |
+| `graphics_card` | `gpuChipset`, `vramGb`, `recommendedPsuW`, `powerConsumptionW`, `lengthMm` |
+| `ram` | `memoryType`, `capacityGb`, `speedMtS`, `moduleCount` |
+| `storage` | `storageType`, `capacityGb`, `interface`, `readSpeedMbS`, `writeSpeedMbS` |
+| `power_supply` | `wattageW`, `efficiencyRating`, `modularType` |
+| `case` | `supportedMotherboardSizes`, `maxGpuLengthMm`, `color` |
+
+Clocks are GHz, power is watts, lengths are millimeters, memory and storage capacity
+are GB, RAM transfer rate is MT/s, and sequential drive speeds are MB/s.
+`capacityGb` for RAM is the whole kit, not each module. Storage uses decimal GB
+(1000 GB = 1 TB). GPU `powerConsumptionW` describes the card alone;
+`recommendedPsuW` describes a recommended whole-system PSU rating. CPU `wattageW`
+is an illustrative thermal design rating, not a measured maximum system draw.
+PSU `modularType` is `full`, `semi`, or `non_modular`; memory types are DDR4/DDR5;
+form factors use ATX, Micro-ATX, Mini-ITX and E-ATX spellings.
+
+These fields support future compatibility checks but do not implement a complete
+compatibility engine. BIOS support, connectors, cooler clearance, drive physical
+sizes and additional power/headroom rules will need separate work.
+
+### SCRUM-6: Parts Catalog API integration
+
+For a C++ endpoint, include `catalog/parts_catalog.h`, link both catalog `.cpp`
+files, and call:
+
+```cpp
+const auto parts = catalog::loadSampleCatalog();
+const auto errors = catalog::validateSampleCatalog(parts);
+// Handle errors before returning data.
+std::ostringstream body;
+catalog::writeCatalogJson(body, parts);
+// Return body.str() with Content-Type: application/json.
+```
+
+Include `<sstream>` for this example. The returned envelope contains `parts`.
+Qi may select/filter Part records before serializing them, using generic validation
+for filtered lists. The serializer labels output as sample data and is intended
+for this seed, not live data.
+
+For an API written in another language, parse `backend/data/sample_parts.json`
+with that language's JSON parser and return its envelope, preserving the field
+names and category values above. Resolve the file path relative to the project
+or configured application directory, not an assumed process working directory.
+Package the JSON with the API deployment. It needs no network, credentials,
+proxy, database or paid service. When a future live provider is unavailable,
+Qi can explicitly select this local fallback and retain `isSampleData: true`.
+The existing backend loads the native seed; it does not parse arbitrary JSON.
+The committed JSON is an export of the same validated seed.
+
+### Presentation
+
+My task was to design a consistent data structure for PC components and create
+an offline sample catalog. I added 21 sample parts across seven categories, with
+shared fields and category-specific specifications. The C++ backend validates
+and loads the sample data, and a matching JSON file gives the API and frontend
+reliable data while the external source is being evaluated. The technical fields
+can later support searching, filtering and compatibility checks.
+
+CST4800 Group 1 is building a PC component browsing and build-selection application. The frontend is TypeScript; the local catalog API is C++17. The PR #9 Vercel Preview was confirmed to fetch live B&H catalog data through ZenRows after its key was configured. Production deployment has not been verified. Full compatibility checks and 3D visualization are future work.
 
 ## SCRUM-6: C++ Parts Catalog API (Qi)
 
@@ -28,29 +169,6 @@ The API listens on port 8080. Keep the server running during the demo. If the ca
 - - Unsupported/empty categories return HTTP 404 with error and supported_categories. Unavailable catalog data returns HTTP 503 with error.
 
 The catalog is loaded before the request threads start and is read-only during requests; restarting reloads it. This prevents concurrent handler reloads from modifying shared data.
-
-## SCRUM-3: offline sample catalog (Justin)
-
-- backend/catalog/parts_catalog.h: typed shared model and category specifications.
-- - backend/catalog/parts_catalog.cpp: validation and JSON export.
-- - backend/catalog/sample_catalog.cpp: canonical native seed with 21 fictional parts, three per category.
-- - backend/data/sample_parts.json: canonical JSON export.
-- - backend/main.cpp: HTTP server and `--catalog` / `--catalog-json` command-line modes.
-- - backend/tests/catalog_test.cpp and backend/tests/check_catalog.sh: validation, JSON escaping, field/category checks and seed/export parity.
-
-The catalog CLI modes use the same executable as the HTTP server. From the repository root:
-```sh
-g++ -std=c++17 -Wall -Wextra -Werror -pedantic -pthread -Ibackend/include backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o /tmp/pc-parts-api
-/tmp/pc-parts-api --catalog
-/tmp/pc-parts-api --catalog-json
-bash backend/tests/check_catalog.sh
-```
-
-Regenerate the canonical JSON export after editing the seed:
-```sh
-/tmp/pc-parts-api --catalog-json > backend/data/sample_parts.json
-bash backend/tests/check_catalog.sh
-```
 
 ## Shared data contract
 
@@ -88,5 +206,21 @@ The endpoint is `GET /v1/parts`. Success returns `{status: "success", data: {sch
 
 ### Deployment status
 
-The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. Vlad confirmed the PR #9 Preview fetched live catalog results after its server-side `ZENROWS_API_KEY` was corrected. Production has not been verified. Do not commit or share the key. Coordinate deployment changes with Vlad. See [the integration and health-check notes](docs/data-integration-and-health-check.md).
+The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. The PR #9 Preview was confirmed to fetch live catalog results after its server-side `ZENROWS_API_KEY` was corrected. Production has not been verified. Do not commit or share the key. Coordinate deployment changes with the team. See [the integration and health-check notes](docs/data-integration-and-health-check.md).
 
+## SCRUM-15 updated from SCRUM-16
+
+Source: Qi's PR #9, commit 94337478fee0896f21eddda29be4159438a0925f.
+The root website now uses SCRUM-16's live category loader and Python catalog
+adapter while retaining SCRUM-15's socket status, selection updates and exports.
+Socket results require fresh CPU and motherboard categories. Cached or failed
+requests cannot establish compatibility; missing live socket specifications
+remain unknown. Exported isSampleData comes from the API.
+
+Set ZENROWS_API_KEY in the server environment and run `python demo_server.py`.
+Open http://localhost:8081. No key is committed. The source's external requests
+were not executed during this update. Local fixtures verified category loading,
+refresh failure and socket status. Run `node --test tests/*.test.mjs`.
+The C++ source and catalog check script also follow SCRUM-16; its server reads
+backend/data/sample_parts.json. Existing frontend TypeScript work is preserved.
+No merge or deployment approval is implied.

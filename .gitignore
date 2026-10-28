@@ -1,4 +1,8 @@
 node_modules/
+frontend/dist/
+backend/backend.exe
+backend/catalog-api
+node_modules/
 # Zenrows CLI (do not commit secrets or run artifacts)
 .zenrows/secrets.json
 .zenrows/config.json
