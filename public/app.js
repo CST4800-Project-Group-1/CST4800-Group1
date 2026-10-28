@@ -1,3 +1,4 @@
+import {evaluateSocketCompatibility} from './socket-compatibility.js';
 const labels = {
   cpu: 'CPU',
   motherboard: 'Motherboard',
@@ -18,6 +19,7 @@ let isSampleData = true;
 const CATALOG_CACHE_KEY = 'buildlab-catalog-cache-v1';
 const catalogCategories = Object.keys(labels);
 let catalogLoading = false;
+let socketCategoriesReady = new Set();
 let loadedCategories = 0;
 
 const $ = id => document.getElementById(id);
@@ -151,11 +153,15 @@ function renderBuild() {
   $('total').textContent = money(chosen.reduce((sum, part) => sum + part.priceCents, 0));
   $('build-count').textContent = chosen.length;
   $('export').disabled = $('clear').disabled = !chosen.length;
+  renderCompatibility();
 }
 
 async function load() {
   let cached = null;
+  if (catalogLoading) return;
   catalogLoading = true;
+  socketCategoriesReady.clear();
+  renderCompatibility();
   loadedCategories = 0;
   try {
     const stored = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || 'null');
@@ -165,9 +171,6 @@ async function load() {
   if (cached) {
     parts = cached.data.parts;
     isSampleData = cached.data.isSampleData === true;
-    for (const key of Object.keys(build)) {
-      if (!parts.some(part => part.category === key && part.id === build[key])) delete build[key];
-    }
     save();
     renderCategories();
     renderBuild();
@@ -181,13 +184,21 @@ async function load() {
       const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}`);
       if (!response.ok) throw new Error('Category request failed');
       const payload = await response.json();
-      if (!Array.isArray(payload.data?.parts)) throw new Error('Category response is invalid');
+      if (payload.status !== 'success' || !Array.isArray(payload.data?.parts)
+          || !payload.data.parts.every(part => part && part.category === categoryName
+            && typeof part.id === 'string' && part.id.trim()
+            && typeof part.name === 'string' && part.name.trim()
+            && Number.isSafeInteger(part.priceCents) && part.priceCents > 0)
+          || new Set(payload.data.parts.map(part => part.id)).size !== payload.data.parts.length) {
+        throw new Error('Category response is invalid');
+      }
       parts = [
         ...parts.filter(part => part.category !== categoryName),
         ...payload.data.parts,
       ];
       isSampleData = payload.data.isSampleData === true;
       loadedCategories += 1;
+      socketCategoriesReady.add(categoryName);
       for (const key of Object.keys(build)) {
         if (key === categoryName && !parts.some(part => part.category === key && part.id === build[key])) {
           delete build[key];
@@ -240,6 +251,7 @@ $('export').onclick = () => {
   const data = {
     isSampleData,
     compatibilityChecked: false,
+    socketCompatibility: renderCompatibility(),
     parts: chosen,
     totalCents: chosen.reduce((sum, part) => sum + part.priceCents, 0),
   };
@@ -253,3 +265,17 @@ $('export').onclick = () => {
 
 renderBuild();
 load();
+
+function renderCompatibility(){
+  const cpu=parts.find(p=>p.category==='cpu'&&p.id===build.cpu);
+  const motherboard=parts.find(p=>p.category==='motherboard'&&p.id===build.motherboard);
+  const result=(socketCategoriesReady.has('cpu') && socketCategoriesReady.has('motherboard'))?evaluateSocketCompatibility(cpu,motherboard):{
+    ruleId:'cpu-motherboard-socket',status:'unknown',cpuSocket:null,motherboardSocket:null,
+    message:'Socket check unavailable until the catalog loads successfully. Saved selections have not been verified.'
+  };
+  $('socket-compatibility').dataset.state=result.status;
+  $('compatibility-title').textContent={waiting:'Waiting for selection',match:'Sockets match',mismatch:'Socket mismatch',unknown:'Compatibility unknown'}[result.status];
+  $('compatibility-message').textContent=result.message;
+  return result;
+}
+

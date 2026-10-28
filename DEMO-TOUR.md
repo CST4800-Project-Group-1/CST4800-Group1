@@ -23,7 +23,7 @@ From the repository root, run `python demo_server.py`, then open http://localhos
 
 ## Deployment
 
-The committed `vercel.json` configures the repository root, static output, and `/v1/parts` API rewrite. Coordinate deployment changes with Vlad. Local ZenRows success does not confirm that the deployed site is using live data.
+The committed `vercel.json` configures the repository root, static output, and `/v1/parts` API rewrite. Coordinate deployment changes with the team. Local ZenRows success does not confirm that the deployed site is using live data.
 
 ## C++ backend
 
