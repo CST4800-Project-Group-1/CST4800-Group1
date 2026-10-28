@@ -19,169 +19,6 @@ PC-Part-Picker/
 │   └── tsconfig.json
 │
 ├── backend/
-├── main.cpp
-├── sample_parts.json
-└── include/
-│  ├── httplib.h
-│  └── nlohmann/
-│     └── json.hpp
-│
-└── README.md
-
-```
-
-## SCUM-6
-- cd backend
-- g++ -std=c++17 -Iinclude main.cpp -o backend.exe -lws2_32 -lcrypt32
-- ./backend 
-- http://localhost:8080/v1/parts
-
-## SCRUM-8: catalog interface and API integration
-
-This work is based on Qi's `feature/qixin-chen` branch at
-`b822967d71c85c67cd4be3ba8ef8b5db0f644d39`. Main still has only startup
-messages. The inspected branches have no existing catalog interface, so this
-ticket adds a minimal browser interface in the existing TypeScript frontend.
-It uses standard DOM APIs with no frontend framework. The backend remains C++17
-with the existing cpp-httplib and nlohmann JSON headers in `backend/include/`.
-
-### Run both applications
-
-Requirements: Node.js 22 or newer with npm, and a C++17 compiler. Run each app in
-a separate terminal. No external parts service, credentials or database is needed.
-
-Windows with MinGW-w64, starting at the repository root:
-
-```powershell
-cd backend
-g++ -std=c++17 -Iinclude main.cpp -o backend.exe -lws2_32 -lcrypt32
-.\backend.exe
-```
-
-Linux/macOS, starting at the repository root:
-
-```bash
-cd backend
-g++ -std=c++17 -Iinclude main.cpp -o catalog-api -pthread
-./catalog-api
-```
-
-Keep the API running. In a second terminal, starting at the repository root:
-
-```bash
-cd frontend
-npm ci
-npm run build
-npm start
-```
-
-Open `http://localhost:3000`. Run the backend from `backend/` because Qi's
-current loader resolves `sample_parts.json` against the working directory.
-Check `http://localhost:8080/v1/parts` if the interface reports an error.
-An unavailable or invalid catalog is shown as an error with a retry button;
-the interface does not silently switch to frontend mock data. If the API uses
-another address, edit the `parts-api-url` meta tag in `frontend/index.html`.
-For an HTTPS deployment, that address must also use HTTPS and allow the frontend
-origin through CORS. The static server is for local development only.
-
-### Data and behavior
-
-The API loads the offline SCRUM-3 sample catalog from `backend/sample_parts.json`:
-21 fictional products, three in each of seven categories. It is already wired
-into Qi's backend. SCRUM-8 does not change the backend or duplicate the seed in
-the frontend. Qi's full response is:
-
-```json
-{"status":"success","data":{"schemaVersion":1,"isSampleData":true,"parts":[]}}
-```
-
-Each part retains `id`, `name`, `category`, `manufacturer`, `model`,
-`priceCents`, `currency`, `imageUrl`, `imageIsPlaceholder`, `availability`,
-and category-specific `specs`. Prices are integer USD cents: 15999 displays as
-$159.99. Category keys are `cpu`, `motherboard`, `graphics_card`, `ram`,
-`storage`, `power_supply`, and `case`. `placeholder:<category>` is a marker,
-not an image URL; the interface displays a labeled placeholder. Specification
-units are shown on the cards. Preserve these field names when adding records.
-
-`frontend/src/catalog.ts` defines the frontend model, validates the API envelope
-and required category specifications, and removes repeated IDs (last record
-wins). A response replaces the catalog rather than appending to it. Requests
-have a 10-second timeout; cancelled or older requests cannot overwrite newer
-results. Refresh always makes a fresh API request. No catalog is persisted in
-browser storage. Empty catalogs and no search matches are shown clearly.
-
-Search covers returned names, models, manufacturers, category labels and specs.
-Category, manufacturer, availability and maximum-price filters combine. Clear
-filters restores all records. Loading, failure, retry and sample-data provenance
-are displayed explicitly. Images failing to load also show a placeholder.
-
-### Checks
-
-```bash
-cd frontend
-npm run check
-npm test
-```
-
-Tests cover all 21 seed records, seven categories, schema errors, duplicate IDs,
-combined filters, API failures, invalid JSON, timeout, retry and stale responses.
-For a manual acceptance check: load the page, confirm 21 records; choose CPUs
-(three records); search for `AM5`; filter stock and price; clear filters; reload
-and refresh (still 21); stop the API and reload (visible error); restart the API
-and retry (21). Use browser network throttling to inspect the loading state.
-
-### SCRUM-8 branch
-
-The completed integration is on `feature/micquaya-gibson`. This branch includes
-Qi's API version used to test SCRUM-8. To check it out:
-
-```bash
-git fetch origin
-git switch feature/micquaya-gibson
-```
-
-For later edits, review and then commit/push when ready:
-
-```bash
-git diff
-git status --short
-git add .gitignore README.md frontend/package.json frontend/tsconfig.json frontend/index.html frontend/styles.css frontend/scripts/serve.mjs frontend/src/index.ts frontend/src/catalog.ts frontend/tests/catalog.test.mjs
-git commit -m "SCRUM-8 connect parts catalog interface to backend API"
-git push -u origin feature/micquaya-gibson
-```
-
-Coordinate with Qi before merging because this branch includes his unmerged API
-work. The existing generated files in `frontend/src/` remain untouched; browser
-builds now go to ignored `frontend/dist/` and HTML loads that output.
-
-### Team presentation
-
-I connected our TypeScript parts catalog to Qi's backend API using the SCRUM-3
-data model. The page loads 21 sample parts, supports search and combined filters,
-and shows loading or useful errors with a retry option. Refreshing requests the
-catalog again, and repeated IDs cannot create duplicate cards. Both applications
-have documented setup commands and the integration has automated tests.
-# PC Part Picker
-
-## Project Description
-
-PC Part Picker is a website that helps users choose PC parts, check compatibility, compare prices, and view a completed computer build.
-
-The project uses:
-- TypeScript for the frontend
-- C++ for the backend
-
-## Project Structure
-
-```text
-PC-Part-Picker/
-├── frontend/
-│   ├── src/
-│   │   └── index.ts
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── backend/
 │   └── main.cpp
 │
 └── README.md
@@ -189,8 +26,10 @@ PC-Part-Picker/
 
 ## SCRUM-3: offline sample parts catalog
 
-The backend uses C++17 with the standard library only. No HTTP server, database,
-API framework or JSON library is currently configured. The frontend is TypeScript;
+The backend uses C++17 with the standard library only. 
+At the time SCRUM-3 was completed, no HTTP server, database, 
+API framework, or JSON library was configured. 
+The frontend is TypeScript;
 this ticket does not change it.
 
 - `backend/catalog/parts_catalog.h`: common Part model, typed specifications and loader/validation/export declarations.
@@ -264,7 +103,7 @@ These fields support future compatibility checks but do not implement a complete
 compatibility engine. BIOS support, connectors, cooler clearance, drive physical
 sizes and additional power/headroom rules will need separate work.
 
-### Qi: Parts Catalog API integration
+### SCRUM-6: Parts Catalog API integration
 
 For a C++ endpoint, include `catalog/parts_catalog.h`, link both catalog `.cpp`
 files, and call:
@@ -293,17 +132,6 @@ Qi can explicitly select this local fallback and retain `isSampleData: true`.
 The existing backend loads the native seed; it does not parse arbitrary JSON.
 The committed JSON is an export of the same validated seed.
 
-### Message to Qi (draft; not sent)
-
-Qi, my SCRUM-3 sample catalog is at `backend/data/sample_parts.json`. It has 21
-fictional sample parts, three in each category, and uses a JSON envelope with
-`schemaVersion`, `isSampleData`, and `parts`. Each part uses `id`, `name`,
-`category`, `manufacturer`, `model`, `priceCents`, `currency`, `imageUrl`,
-`imageIsPlaceholder`, `availability`, and `specs`. Please keep these field names
-in the API. Prices are USD cents and units are documented above. For C++, use
-`loadSampleCatalog()` and `writeCatalogJson()` from `backend/catalog/`; another
-API language can read the JSON file directly. It works offline.
-
 ### Presentation
 
 My task was to design a consistent data structure for PC components and create
@@ -313,37 +141,74 @@ and loads the sample data, and a matching JSON file gives the API and frontend
 reliable data while the external source is being evaluated. The technical fields
 can later support searching, filtering and compatibility checks.
 
+CST4800 Group 1 is building a PC component browsing and build-selection application. The frontend is TypeScript; the local catalog API is C++17. Vlad confirmed the PR #9 Vercel Preview fetched live B&H catalog data through ZenRows after its key was configured. Production deployment has not been verified. Full compatibility checks and 3D visualization are future work.
 
-## SCRUM-15: selected CPU and motherboard sockets
+## SCRUM-6: C++ Parts Catalog API (Qi)
 
-The existing BuildLab presentation website and API remain unchanged apart from
-a socket status panel in the build sidebar. Deployment still uses the repository
-root, `public/`, and the existing Vercel routing. No catalog-loader integration,
-API change, or alternate website is part of this ticket.
+`backend/main.cpp` combines the C++ HTTP server and catalog CLI. Run it without arguments for the API; use `--catalog` for the validated summary or `--catalog-json` for JSON export. Start the HTTP server from `backend/`; it reads the canonical `backend/data/sample_parts.json` file.
 
-Run the presentation application and its existing API adapter together with
-`python demo_server.py`, then open http://localhost:8081. The separate frontend
-and C++ application setup instructions above remain available.
+Linux/macOS:
+```sh
+g++ -std=c++17 -pthread -Ibackend/include backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o /tmp/pc-parts-api
+(cd backend && /tmp/pc-parts-api)
+```
 
-The panel shows waiting when either part is missing, a socket match, a mismatch
-naming both sockets, or unknown. It recomputes after add, replace, remove, clear
-and refresh. It never treats unknown socket data or an unavailable catalog as
-compatible. Browser storage retains IDs, not decisions; fresh catalog records
-are used on refresh. Downloaded builds include a socket-only result while full
-`compatibilityChecked` remains false.
+Windows (MinGW-w64):
+```powershell
+g++ -std=c++17 -pthread -Ibackend/include backend/main.cpp backend/catalog/parts_catalog.cpp backend/catalog/sample_catalog.cpp -o backend/backend.exe -lws2_32 -lcrypt32
+cd backend
+.\backend.exe
+```
 
-The isolated preview rule in `public/socket-compatibility.js` is pending Howard's
-SCRUM-9 confirmation and Vlad's release review for the October 14 checkpoint.
-It currently recognizes only the seed's AM5/LGA1700 sockets. The proposed
-contract and owner handoff are in `docs/socket-result-contract.md`.
+The API listens on port 8080. Keep the server running during the demo. If the catalog file is missing or invalid, restore it and restart the process. A port binding failure exits with status 1.
 
-Run socket rule tests with Node.js 22 or newer:
-`node --test tests/socket-compatibility.test.mjs`.
-For browser acceptance, add DemoCore C6 and DemoBoard B650 ATX (match); replace
-the board with ExampleBoard B760 DDR4 (AM5/LGA1700 mismatch); remove either part
-(waiting); clear and refresh; confirm unknown or unavailable data never matches.
+- GET /: JSON health response, status online.
+- - GET /v1/parts: status success; data contains the catalog envelope with schemaVersion, isSampleData and parts.
+- - GET /v1/parts/{category}: status success, category, count and a data array containing matching parts. Category matching ignores case.
+- - Supported categories: cpu, motherboard, graphics_card, ram, storage, power_supply, case.
+- - Unsupported/empty categories return HTTP 404 with error and supported_categories. Unavailable catalog data returns HTTP 503 with error.
 
-## SCRUM-15 updated from SCRUM-16 — October 27, 2026
+The catalog is loaded before the request threads start and is read-only during requests; restarting reloads it. This prevents concurrent handler reloads from modifying shared data.
+
+## Shared data contract
+
+The envelope is {schemaVersion: 1, isSampleData: true, parts: [...]}. Each part has id, name, category, manufacturer, model, priceCents, currency, imageUrl, imageIsPlaceholder, availability and specs. IDs are stable identifiers. Prices are integer USD cents (15999 = $159.99). Availability is in_stock, out_of_stock or preorder. placeholder:<category> is an image marker, not a download URL; render a local placeholder. Real image URLs must use HTTPS.
+  
+  CPU specs include socket, core/thread counts, clocks in GHz and wattageW. Motherboard specs include socket, chipset, formFactor, memoryType and maxMemoryGb. GPU specs include chipset, VRAM in GB, recommended PSU watts, power consumption watts and length in mm. RAM capacity is for the whole kit in GB; speed is MT/s. Storage capacity uses decimal GB, interfaces and sequential speeds in MB/s. PSU specs include wattage, efficiency and modular type (full, semi, non_modular). Cases list supported board sizes, maximum GPU length in mm and color.
+  
+  These fields can support future compatibility rules, but do not verify complete compatibility: BIOS, connectors, cooler clearance and power headroom need separate work.
+  
+## Live Parts API (ZenRows)
+
+The Python endpoint `api/catalog.py` fetches current product listings from B&H Photo through ZenRows. It returns up to 25 parsed products in each of seven categories and caches a successful catalog for one hour. ZenRows is the fetch service; the product listings come from B&H. This is separate from the C++ sample-data API described above.
+
+### Run locally
+
+1. Get a ZenRows API key and keep it private. For a local run, either set `ZENROWS_API_KEY` in your shell or create `.zenrows/secrets.json` (this local file is ignored by Git) with this shape:
+
+   ```json
+   {"apiKey": "YOUR_ZENROWS_API_KEY"}
+   ```
+
+2. From the repository root, start the local website and API adapter:
+
+   ```powershell
+   python demo_server.py
+   ```
+
+3. Open `http://localhost:8081` or request the API directly:
+
+   ```powershell
+   Invoke-RestMethod http://localhost:8081/v1/parts
+   ```
+
+The endpoint is `GET /v1/parts`. Success returns `{status: "success", data: {schemaVersion: 1, isSampleData: false, source, generatedAt, parts: [...]}}`. The site also requests `GET /v1/parts?category=cpu` (and the other supported category names) sequentially so it can show the first live category before the rest finish. Each part follows the shared data contract above. A missing key or fetch/parse failure returns HTTP 503 with an `error` field; the website reports the catalog unavailable and does not silently switch to sample prices. The C++ sample catalog remains available separately. Live product count and availability can change.
+
+### Deployment status
+
+The frontend calls `/v1/parts`; Vercel rewrites it to the Python function at `/api/catalog`. Vlad confirmed the PR #9 Preview fetched live catalog results after its server-side `ZENROWS_API_KEY` was corrected. Production has not been verified. Do not commit or share the key. Coordinate deployment changes with Vlad. See [the integration and health-check notes](docs/data-integration-and-health-check.md).
+
+## SCRUM-15 updated from SCRUM-16
 
 Source: Qi's PR #9, commit 94337478fee0896f21eddda29be4159438a0925f.
 The root website now uses SCRUM-16's live category loader and Python catalog
