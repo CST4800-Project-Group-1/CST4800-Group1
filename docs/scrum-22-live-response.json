@@ -1,0 +1,329 @@
+{
+  "capturedAt": "2026-11-12T01:00:14Z",
+  "recordLimitPerCategory": 8,
+  "captureMethod": "local API handler with live retailer fetches; not deployed HTTP",
+  "responses": {
+    "cpu": {
+      "headers": {
+        "status": 200,
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Length": "7762",
+        "Cache-Control": "no-store"
+      },
+      "body": {
+        "status": "success",
+        "data": {
+          "schemaVersion": 1,
+          "isSampleData": false,
+          "source": "B&H Photo via ZenRows",
+          "generatedAt": "2026-11-12T01:00:29Z",
+          "parts": [
+            {
+              "id": "bh-o-com-c-product-1834131-reg-amd-100-100001581wof-ryzen-9-5900xt-3-3-html",
+              "name": "AMD Ryzen 9 5900XT 3.3 GHz 16-Core AM4 Processor",
+              "category": "cpu",
+              "manufacturer": "AMD",
+              "model": "100-100001581WOF",
+              "priceCents": 31500,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1720539624_1834131.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "16 Cores & 32 Threads",
+                "feature2": "3.3 GHz Base Clock",
+                "feature3": "4.8 GHz Max Boost Clock",
+                "socket": null,
+                "socketProvenance": null
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1834131-REG/amd_100_100001581wof_ryzen_9_5900xt_3_3.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=100-100001581WOF",
+                "Newegg": "https://www.newegg.com/p/pl?d=100-100001581WOF",
+                "Amazon": "https://www.amazon.com/s?k=100-100001581WOF&ref=nb_sb_noss"
+              }
+            },
+            {
+              "id": "bh--www-bhphotovideo-com-c-product-1878570-reg-amd-ryzen-9-9950x3d-4-4-html",
+              "name": "AMD Ryzen 9 9950X3D 4.3 GHz 16-Core AM5 Processor",
+              "category": "cpu",
+              "manufacturer": "AMD",
+              "model": "100-100000719WOF",
+              "priceCents": 69900,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1740525580_1878570.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "16 Cores & 32 Threads",
+                "feature2": "4.3 GHz Base Clock",
+                "feature3": "5.7 GHz Max Boost Clock",
+                "socket": null,
+                "socketProvenance": null
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1878570-REG/amd_ryzen_9_9950x3d_4_4.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=100-100000719WOF",
+                "Newegg": "https://www.newegg.com/p/pl?d=100-100000719WOF",
+                "Amazon": "https://www.amazon.com/s?k=100-100000719WOF&ref=nb_sb_noss"
+              }
+            },
+            {
+              "id": "bh--com-c-product-1944461-reg-amd-100-100001973wof-ryzen-7-9850x3d-4-7-html",
+              "name": "AMD Ryzen 7 9850X3D 4.7 GHz 8-Core AM5 Processor",
+              "category": "cpu",
+              "manufacturer": "AMD",
+              "model": "100-100001973WOF",
+              "priceCents": 45400,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1768492294_1944461.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "8 Cores & 16 Threads",
+                "feature2": "4.7 GHz Base Clock",
+                "feature3": "5.6 GHz Max Boost Clock",
+                "socket": "AM5",
+                "socketProvenance": {
+                  "sourceUrl": "https://www.bhphotovideo.com/c/product/1944461-REG/amd_100_100001973wof_ryzen_7_9850x3d_4_7.html",
+                  "sourceField": "CPU Socket",
+                  "rawValue": "AM5",
+                  "verifiedAt": "2026-11-12T01:00:16Z",
+                  "expiresAt": "2026-11-12T02:00:16Z",
+                  "method": "explicit_product_spec"
+                }
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1944461-REG/amd_100_100001973wof_ryzen_7_9850x3d_4_7.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=100-100001973WOF",
+                "Newegg": "https://www.newegg.com/p/pl?d=100-100001973WOF",
+                "Amazon": "https://www.amazon.com/s?k=100-100001973WOF&ref=nb_sb_noss"
+              }
+            },
+            {
+              "id": "bh--com-c-product-1859346-reg-amd-100-100001084wof-ryzen-7-9800x3d-am5-html",
+              "name": "AMD Ryzen 7 9800X3D 4.7 GHz Eight-Core AM5 Processor",
+              "category": "cpu",
+              "manufacturer": "AMD",
+              "model": "100-100001084WOF",
+              "priceCents": 41900,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1730414723_1859346.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "8 Cores & 16 Threads",
+                "feature2": "4.7 GHz Base Clock",
+                "feature3": "5.2 GHz Max Boost Clock",
+                "socket": null,
+                "socketProvenance": null
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1859346-REG/amd_100_100001084wof_ryzen_7_9800x3d_am5.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=100-100001084WOF",
+                "Newegg": "https://www.newegg.com/p/pl?d=100-100001084WOF",
+                "Amazon": "https://www.amazon.com/s?k=100-100001084WOF&ref=nb_sb_noss"
+              }
+            },
+            {
+              "id": "bh--com-c-product-1977808-reg-amd-100-100000651pof-ryzen-7-5800x3d-3-4-html",
+              "name": "AMD Ryzen 7 5800X3D 3.4 GHz Eight-Core AM4 Processor (10th Anniversary Edition)",
+              "category": "cpu",
+              "manufacturer": "AMD",
+              "model": "100-100000651POF",
+              "priceCents": 33995,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1782344725_1977808.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "8 Cores & 16 Threads",
+                "feature2": "3.4 GHz Base Clock",
+                "feature3": "4.5 GHz Max Boost Clock",
+                "socket": null,
+                "socketProvenance": null
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1977808-REG/amd_100_100000651pof_ryzen_7_5800x3d_3_4.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=100-100000651POF",
+                "Newegg": "https://www.newegg.com/p/pl?d=100-100000651POF",
+                "Amazon": "https://www.amazon.com/s?k=100-100000651POF&ref=nb_sb_noss"
+              }
+            },
+            {
+              "id": "bh-ovideo-com-c-product-1834127-reg-amd-100-100001277wof-ryzen-9-9950x-html",
+              "name": "AMD Ryzen 9 9950X 4.3 GHz 16-Core AM5 Processor",
+              "category": "cpu",
+              "manufacturer": "AMD",
+              "model": "100-100001277WOF",
+              "priceCents": 53900,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1720539347_1834127.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "16 Cores & 32 Threads",
+                "feature2": "4.3 GHz Base Clock",
+                "feature3": "5.7 GHz Max Boost Clock",
+                "socket": null,
+                "socketProvenance": null
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1834127-REG/amd_100_100001277wof_ryzen_9_9950x.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=100-100001277WOF",
+                "Newegg": "https://www.newegg.com/p/pl?d=100-100001277WOF",
+                "Amazon": "https://www.amazon.com/s?k=100-100001277WOF&ref=nb_sb_noss"
+              }
+            },
+            {
+              "id": "bh-eo-com-c-product-1695216-reg-amd-100-100000926wof-ryzen-7-5700x-3-4-html",
+              "name": "AMD Ryzen 7 5700X 3.4 GHz Eight-Core AM4 Processor",
+              "category": "cpu",
+              "manufacturer": "AMD",
+              "model": "100-100000926WOF",
+              "priceCents": 18900,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1647429645_1695216.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "8 Cores & 16 Threads",
+                "feature2": "3.4 GHz Base Clock",
+                "feature3": "4.6 GHz Max Boost Clock",
+                "socket": null,
+                "socketProvenance": null
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1695216-REG/amd_100_100000926wof_ryzen_7_5700x_3_4.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=100-100000926WOF",
+                "Newegg": "https://www.newegg.com/p/pl?d=100-100000926WOF",
+                "Amazon": "https://www.amazon.com/s?k=100-100000926WOF&ref=nb_sb_noss"
+              }
+            },
+            {
+              "id": "bh-video-com-c-product-1952531-reg-intel-bx80768270k-core-ultra-7-270k-html",
+              "name": "Intel Core Ultra 7 270K Plus 24-Core LGA 1851 Processor",
+              "category": "cpu",
+              "manufacturer": "Intel",
+              "model": "BX80768270K",
+              "priceCents": 32999,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1774522517_1952531.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "24 Cores & 24 Threads",
+                "feature2": "3.7 GHz P-Core Clock Speed",
+                "feature3": "5.5 GHz Maximum Turbo Boost Frequency",
+                "socket": null,
+                "socketProvenance": null
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1952531-REG/intel_bx80768270k_core_ultra_7_270k.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=BX80768270K",
+                "Newegg": "https://www.newegg.com/p/pl?d=BX80768270K",
+                "Amazon": "https://www.amazon.com/s?k=BX80768270K&ref=nb_sb_noss"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "motherboard": {
+      "headers": {
+        "status": 200,
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Length": "2178",
+        "Cache-Control": "no-store"
+      },
+      "body": {
+        "status": "success",
+        "data": {
+          "schemaVersion": 1,
+          "isSampleData": false,
+          "source": "B&H Photo via ZenRows",
+          "generatedAt": "2026-11-12T01:00:31Z",
+          "parts": [
+            {
+              "id": "bh-deo-com-c-product-1852679-reg-gigabyte-x870-eagle-wifi7-motherboard-html",
+              "name": "Gigabyte X870 EAGLE WIFI7 AM5 ATX Motherboard",
+              "category": "motherboard",
+              "manufacturer": "Gigabyte",
+              "model": "X870 EAGLE WIFI7",
+              "priceCents": 22999,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1736439436_1852679.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "ATX Form Factor",
+                "feature2": "AMD X870 Chipset",
+                "feature3": "AM5 Socket",
+                "socket": null,
+                "socketProvenance": null
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1852679-REG/gigabyte_x870_eagle_wifi7_motherboard.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=X870+EAGLE+WIFI7",
+                "Newegg": "https://www.newegg.com/p/pl?d=X870+EAGLE+WIFI7",
+                "Amazon": "https://www.amazon.com/s?k=X870+EAGLE+WIFI7"
+              }
+            },
+            {
+              "id": "bh-bhphotovideo-com-c-product-1950535-reg-gigabyte-x870e-aero-x3d-wood-html",
+              "name": "Gigabyte X870E AERO X3D WOOD AM5 ATX Motherboard",
+              "category": "motherboard",
+              "manufacturer": "Gigabyte",
+              "model": "X870E AERO X3D WOOD",
+              "priceCents": 45100,
+              "currency": "USD",
+              "imageUrl": "https://static.bhphoto.com/images/images345x345/1771428510_1950535.jpg",
+              "imageIsPlaceholder": false,
+              "availability": "in_stock",
+              "specs": {
+                "feature1": "ATX Form Factor",
+                "feature2": "AMD X870E Chipset",
+                "feature3": "AM5 Socket",
+                "socket": "AM5",
+                "socketProvenance": {
+                  "sourceUrl": "https://www.bhphotovideo.com/c/product/1950535-REG/gigabyte_x870e_aero_x3d_wood.html",
+                  "sourceField": "CPU Socket",
+                  "rawValue": "AM5",
+                  "verifiedAt": "2026-11-12T01:00:31Z",
+                  "expiresAt": "2026-11-12T02:00:31Z",
+                  "method": "explicit_product_spec"
+                }
+              },
+              "source": "B&H Photo",
+              "sourceUrl": "https://www.bhphotovideo.com/c/product/1950535-REG/gigabyte_x870e_aero_x3d_wood.html",
+              "retailerProductUrls": {},
+              "retailerSearchUrls": {
+                "Best Buy": "https://www.bestbuy.com/site/searchpage.jsp?st=X870E+AERO+X3D+WOOD",
+                "Newegg": "https://www.newegg.com/p/pl?d=X870E+AERO+X3D+WOOD",
+                "Amazon": "https://www.amazon.com/s?k=X870E+AERO+X3D+WOOD"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

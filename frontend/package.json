@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "start": "node scripts/serve.mjs",
-    "test": "tsc -p tsconfig.json && node --test tests/catalog.test.mjs"
+    "test": "tsc -p tsconfig.json && node --test tests/catalog.test.mjs ../tests/socket-compatibility.test.mjs ../tests/socket-examples.test.mjs ../tests/catalog-integration.test.mjs"
   },
   "keywords": [],
   "author": "",

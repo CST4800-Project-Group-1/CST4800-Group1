@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {evaluateSocketCompatibility as check} from '../public/socket-compatibility.js';
-const part=(category,socket)=>({id:category,name:`Selected ${category}`,category,specs:{socket}});
+import {verifiedPart} from './fixtures/socket-parts.mjs';
+const part=(category,socket)=>{
+  const record=verifiedPart(category,socket);
+  record.specs.socket=socket;
+  return record;
+};
 test('waits when either or both selections are absent',()=>{
   for(const [cpu,board] of [[null,null],[part('cpu','AM5'),null],[null,part('motherboard','AM5')]])assert.equal(check(cpu,board).status,'waiting');
 });
