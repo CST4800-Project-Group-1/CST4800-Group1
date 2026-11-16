@@ -244,3 +244,53 @@ test('all seven categories use the same direct-link, price, and selection popup'
   }
   assert.equal(h.get('total').textContent,'$3,003.00');
 });
+
+test('SCRUM-24 downloads exactly the displayed four-state result and evaluation context', async()=>{
+  for(const status of ['waiting','match','mismatch','unknown']){
+    const h=await setup();
+    h.add('cpu');
+    if(status!=='waiting')h.add(status==='mismatch'?'motherboard-2':'motherboard');
+    if(status==='unknown')delete h.context.inspect().parts.find(p=>p.id==='cpu').specs.socketProvenance;
+    const data=await h.download();
+    assert.equal(data.socketCompatibility.status,status);
+    assert.equal(h.get('socket-compatibility').dataset.state,status);
+    assert.equal(data.socketCompatibility.message,h.get('compatibility-message').textContent);
+    assert.equal(data.socketCompatibility.scope,'socket-only');
+    assert.equal(data.socketCompatibility.biosChecked,false);
+    assert.equal(data.socketCompatibility.fullBuildChecked,false);
+    assert.equal(data.compatibilityChecked,false);
+    assert.equal(data.socketEvaluation.cpuPartId,'cpu');
+    assert.equal(data.socketEvaluation.motherboardPartId,status==='waiting'?null:status==='mismatch'?'motherboard-2':'motherboard');
+    assert.ok(Number.isFinite(Date.parse(data.socketEvaluation.evaluatedAt)));
+    assert.equal(data.socketEvaluation.refreshState,'ready');
+    assert.match(h.get('compatibility-checked-at').textContent,/Downloads include this result/);
+  }
+});
+
+test('SCRUM-24 checks expiry again at download and refreshes the displayed message',async()=>{
+  const h=await setup();h.add('cpu');h.add('motherboard');
+  assert.equal(h.get('socket-compatibility').dataset.state,'match');
+  h.context.inspect().parts.find(p=>p.id==='cpu').specs.socketProvenance.expiresAt=new Date(Date.now()-1).toISOString();
+  const data=await h.download();
+  assert.equal(data.socketCompatibility.status,'unknown');
+  assert.equal(data.socketCompatibility.message,h.get('compatibility-message').textContent);
+  assert.equal(h.get('socket-compatibility').dataset.state,'unknown');
+});
+
+test('SCRUM-24 retailer selection preserves socket-source identity in downloaded evidence',async()=>{
+  const h=await setup();h.add('cpu');h.add('motherboard');
+  const cpu=h.context.inspect().parts.find(p=>p.id==='cpu');
+  h.setResponse(category=>category===null?{offers:[{source:'Amazon',sourceUrl:'https://www.amazon.com/dp/B0CK2DB8NY',priceCents:4999}]}:{status:'success',data:{parts:[part(category)]}});
+  const details=h.get('parts').children.map(card=>card.children[1].children.at(-1).children[0]).find(button=>button['aria-label']==='View details for cpu');
+  details.onclick();await new Promise(resolve=>setImmediate(resolve));
+  const rows=h.get('part-dialog-content').children.find(child=>child.className==='retailer-offers').children;
+  rows[1].children[1].children[1].onclick();
+  const data=await h.download();
+  assert.equal(data.socketCompatibility.status,'match');
+  assert.equal(data.totalCents,5099);
+  const savedCpu=data.parts.find(p=>p.id==='cpu');
+  assert.equal(savedCpu.sourceUrl,'https://www.amazon.com/dp/B0CK2DB8NY');
+  assert.equal(savedCpu.catalogSourceUrl,cpu.sourceUrl);
+  assert.equal(data.socketEvaluation.cpuSourceUrl,cpu.sourceUrl);
+  assert.equal(savedCpu.specs.socketProvenance.sourceUrl,cpu.sourceUrl);
+});
