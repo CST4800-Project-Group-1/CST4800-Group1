@@ -2,8 +2,11 @@
 
 Jira: https://cst-4800-group1.atlassian.net/browse/SCRUM-24
 Dependency: PR #11, SCRUM-22/SCRUM-23 at 706f83c3a43b50b49430eaef0ef3e8cc874b6961.
-This branch builds on that revision; review its focused diff against feature/qixin-chen.
-Do not merge independently of the verified metadata and rule dependency.
+This branch includes that verified metadata and rule revision. PR #12 targets main
+and carries the complete SCRUM-24 integration, including its SCRUM-22/SCRUM-23
+inputs. Review those included changes together; a separate merge of PR #11 is
+not required for this branch to contain the dependency. Required repository
+approvals and deployment verification still apply.
 
 ## Behavior
 
