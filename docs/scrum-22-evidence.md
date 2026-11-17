@@ -5,13 +5,17 @@
 Retailer rows retain matched product URLs even if the price fetch fails or a
 later response omits a URL. A matched link becomes clickable immediately rather
 than waiting for other retailer prices. Late link-only responses also update
-finished rows without overwriting manually entered prices. Links open the exact
-retailer product page in a new tab; unmatched names are disabled text without
-link styling. Search pages are never substituted for matched products.
+finished rows without overwriting manually entered prices. Matched links open
+the exact retailer product page in a new tab. At Qi's subsequent request,
+unmatched retailers now link to that retailer's search results for the selected
+model, explicitly labeled "Search results". Search URLs are never stored or
+treated as verified product URLs; a later match replaces the search link.
 
 New tests cover early links during another pending lookup, late links after
 price failure, preserving entered prices, and URL retention after blocked
-product detail retrieval. **49 Python tests and 55 frontend/root tests pass**;
+product detail retrieval. A further test checks encoded search terms and
+replacement of the fallback with a verified product page.
+**49 Python tests and 56 frontend/root tests pass**;
 TypeScript build/noEmit and whitespace checks pass. The Vercel deployment still
 needs to be updated and verified before merge.
 

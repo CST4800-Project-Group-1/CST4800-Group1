@@ -165,19 +165,40 @@ test('resolved W7500 links replace search rows without losing entered prices', a
   assert.equal(rows()[1].children[1].children[0].textContent,'$429.00');
 });
 
-test('popup never uses retailer search URLs as product links',async()=>{
+test('unmatched retailers link to clearly labeled search results, not verified product pages',async()=>{
   const h=await setup();
   h.get('parts').children[0].children[1].children.at(-1).children[0].onclick();
   const rows=h.get('part-dialog-content').children.find(child=>child.className==='retailer-offers').children;
   for(const row of rows.slice(1)){
-    assert.equal(row.children[0].children[0].href,undefined);
-    assert.doesNotMatch(row.children[0].children[0].textContent,/Search at/);
+    assert.ok(row.children[0].children[0].href.startsWith('https://'));
+    assert.match(row.children[0].children[1].textContent,/Search results/);
+    assert.equal(h.context.verifiedProductUrl(row.children[0].children[0].textContent,row.children[0].children[0].href),null);
   }
   assert.equal(h.context.verifiedProductUrl('Amazon','https://www.amazon.com/s?k=W6400'),null);
   assert.equal(h.context.verifiedProductUrl('Best Buy','https://www.bestbuy.com/site/searchpage.jsp?st=W6400'),null);
   assert.equal(h.context.verifiedProductUrl('Newegg','https://www.newegg.com/p/pl?d=W6400'),null);
   assert.equal(h.context.verifiedProductUrl('Amazon','https://amazon.com.evil.example/dp/B0GCMFR35P'),null);
   assert.equal(h.context.verifiedProductUrl('Amazon','https://www.amazon.com/dp/B0GCMFR35P'),'https://www.amazon.com/dp/B0GCMFR35P');
+});
+
+test('search fallback encodes the model and upgrades to a matched product link',async()=>{
+  const h=await setup();
+  const model='CPU A&B / 123';
+  const search=h.context.retailerSearchUrl('Newegg',{model,name:'Example CPU'});
+  assert.equal(new URL(search).searchParams.get('d'),model);
+  assert.equal(new URL(search).hostname,'www.newegg.com');
+  assert.equal(h.context.retailerSearchUrl('Unknown store',{model}),null);
+  assert.equal(h.context.retailerSearchUrl('Amazon',{}),null);
+  let resolveLinks;
+  h.setResponse((category,url)=>url.searchParams.get('links')==='1'
+    ?new Promise(resolve=>{resolveLinks=resolve}):{offers:[]});
+  h.get('parts').children[0].children[1].children.at(-1).children[0].onclick();
+  const rows=()=>h.get('part-dialog-content').children.find(child=>child.className==='retailer-offers').children;
+  assert.match(rows()[2].children[0].children[0].href,/\/p\/pl\?/);
+  resolveLinks({offers:[{source:'Newegg',sourceUrl:'https://www.newegg.com/p/N82E16814105117'}]});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(rows()[2].children[0].children[0].href,'https://www.newegg.com/p/N82E16814105117');
+  assert.doesNotMatch(rows()[2].children[0].children[1].textContent,/Search results/);
 });
 
 test('single direct-page price is shown and ambiguous offers retain manual input',async()=>{

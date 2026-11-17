@@ -340,6 +340,21 @@ function verifiedProductUrl(source, value) {
   return null;
 }
 
+function retailerSearchUrl(source, part) {
+  const searches = {
+    'B&H Photo': ['https://www.bhphotovideo.com/c/search', 'Ntt'],
+    Amazon: ['https://www.amazon.com/s', 'k'],
+    Newegg: ['https://www.newegg.com/p/pl', 'd'],
+    'Best Buy': ['https://www.bestbuy.com/site/searchpage.jsp', 'st'],
+  };
+  const search = searches[source];
+  const query = (part.model || part.name || '').trim();
+  if (!search || !query) return null;
+  const url = new URL(search[0]);
+  url.searchParams.set(search[1], query);
+  return url.href;
+}
+
 function openPartDetails(part) {
   const dialog = $('part-dialog');
   const content = $('part-dialog-content');
@@ -405,16 +420,22 @@ function openPartDetails(part) {
     row.replaceChildren();
     const info = node('div');
     const productUrl = verifiedProductUrl(offer.source, offer.sourceUrl);
-    const link = node(productUrl ? 'a' : 'span', 'offer-store', offer.source || 'Retailer');
-    if (productUrl) {
-      link.href = productUrl;
+    const searchUrl = productUrl ? null : retailerSearchUrl(offer.source, part);
+    const destination = productUrl || searchUrl;
+    const link = node(destination ? 'a' : 'span', 'offer-store', offer.source || 'Retailer');
+    if (destination) {
+      link.href = destination;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-      link.setAttribute('aria-label', `Open ${offer.source} product page for ${part.name}`);
+      link.setAttribute('aria-label', productUrl
+        ? `Open ${offer.source} product page for ${part.name}`
+        : `Search ${offer.source} for ${part.name}`);
     } else {
       link.setAttribute('aria-disabled', 'true');
     }
-    const retailerMessage = offer.priceIsAmbiguous
+    const retailerMessage = searchUrl
+      ? 'Search results — confirm the exact model and current price.'
+      : offer.priceIsAmbiguous
       ? 'Multiple prices available. Check the retailer’s website and enter your chosen price.'
       : !productUrl
         ? offer.priceLoading ? 'Finding a matching product page…' : 'No verified product page found for this model.'
