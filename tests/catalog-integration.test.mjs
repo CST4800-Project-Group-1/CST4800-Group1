@@ -214,6 +214,7 @@ test('retailers finish together and reopening shares pending requests',async()=>
   open();
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(rows()[2].children[1].children[0].textContent,'Checking price...');
+  assert.equal(rows()[2].children[0].children[0].href,'https://www.newegg.com/p/N82E16814105117');
   assert.equal(rows()[1].children[1].children[0].textContent,'Checking price...');
   open();
   await new Promise(resolve=>setImmediate(resolve));
@@ -223,6 +224,42 @@ test('retailers finish together and reopening shares pending requests',async()=>
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(rows()[2].children[1].children[0].textContent,'$429.00');
   assert.equal(rows()[1].children[1].children[0].textContent,'Enter the Price');
+});
+
+test('late product links become clickable after price failure without losing entered prices',async()=>{
+  const h=await setup();
+  let resolveLinks;
+  const pendingLinks=new Promise(resolve=>{resolveLinks=resolve});
+  h.setResponse((category,url)=>{
+    if(category!==null)return {status:'success',data:{parts:[part(category)]}};
+    return url.searchParams.get('links')==='1'?pendingLinks:{offers:[]};
+  });
+  h.get('parts').children[0].children[1].children.at(-1).children[0].onclick();
+  const rows=()=>h.get('part-dialog-content').children.find(child=>child.className==='retailer-offers').children;
+  await new Promise(resolve=>setImmediate(resolve));
+  const input=rows()[1].children[1].children[0].children[0];
+  input.value='123.45';input.oninput();input.onblur({relatedTarget:null});
+  resolveLinks({offers:[{source:'Amazon',sourceUrl:'https://www.amazon.com/dp/B000000001'}]});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(rows()[1].children[0].children[0].href,'https://www.amazon.com/dp/B000000001');
+  assert.equal(rows()[1].children[0].children[0].target,'_blank');
+  assert.equal(rows()[1].children[0].children[0].rel,'noopener noreferrer');
+  assert.equal(rows()[1].children[1].children[0].textContent,'$123.45');
+});
+
+test('supplied retailer product pages are clickable before price lookups finish',async()=>{
+  const h=await setup();
+  const urls={Amazon:'https://www.amazon.com/dp/B000000001',Newegg:'https://www.newegg.com/p/N82E16814105117','Best Buy':'https://www.bestbuy.com/product/example/ABC123'};
+  h.setResponse(category=>({status:'success',data:{parts:[{...part(category),source:'B&H Photo',
+    sourceUrl:'https://www.bhphotovideo.com/c/product/123-REG/example.html',retailerProductUrls:urls}]}}));
+  await h.context.refresh();
+  h.setResponse(()=>({offers:[]}));
+  h.get('parts').children[0].children[1].children.at(-1).children[0].onclick();
+  const rows=h.get('part-dialog-content').children.find(child=>child.className==='retailer-offers').children;
+  assert.equal(rows[0].children[0].children[0].href,'https://www.bhphotovideo.com/c/product/123-REG/example.html');
+  for(const [index,source] of ['Amazon','Newegg','Best Buy'].entries())assert.equal(rows[index+1].children[0].children[0].href,urls[source]);
+  await new Promise(resolve=>setImmediate(resolve));
+  for(const [index,source] of ['Amazon','Newegg','Best Buy'].entries())assert.equal(rows[index+1].children[0].children[0].href,urls[source]);
 });
 
 test('recent automatic prices survive a page refresh without another lookup',async()=>{

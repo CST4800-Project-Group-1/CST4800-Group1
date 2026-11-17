@@ -5,6 +5,24 @@ from api.catalog import _ProductPageParser, _class_element, _price_cents, _price
 
 
 class PriceParsingTests(unittest.TestCase):
+    def test_matched_product_link_survives_failed_detail_fetch(self):
+        from api.catalog import _lookup
+        html='<a href="/dp/B000000001">AMD Radeon Pro W6400 4GB GDDR6</a>'
+        for detail in (None, RuntimeError('Provider unavailable')):
+            with patch('api.catalog._fetch_page',side_effect=[html,detail]):
+                offers=_lookup('Amazon','fixture-model','test','AMD Radeon Pro W6400 4GB GDDR6')
+            self.assertEqual(offers[0]['sourceUrl'],'https://www.amazon.com/dp/B000000001')
+            self.assertNotIn('priceCents',offers[0])
+
+    def test_exact_model_jsonld_link_survives_failed_detail_fetch(self):
+        from api.catalog import _lookup
+        html='''<script type="application/ld+json">{"@type":"Product","mpn":"EXACT-123",
+            "offers":{"priceCurrency":"USD","price":"199.99","url":"https://www.amazon.com/dp/B000000001"}}</script>'''
+        with patch('api.catalog._fetch_page',side_effect=[html,RuntimeError('Provider unavailable')]):
+            offers=_lookup('Amazon','EXACT-123','test')
+        self.assertEqual(offers[0]['sourceUrl'],'https://www.amazon.com/dp/B000000001')
+        self.assertNotIn('priceCents',offers[0])
+
     def test_direct_lookup_waits_for_price_not_a_fixed_delay(self):
         from api.catalog import _lookup
         html = '<div class="product-price--x">$429.00</div>'

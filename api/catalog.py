@@ -774,16 +774,19 @@ def _lookup(store, model, key, name=""):
         if remaining <= 0:
             raise RuntimeError("Retailer lookup exceeded its time budget.")
         return _fetch_page(url, key, options=RETAILERS[store].get("fetch_options"), timeout=remaining)
-    confirmed_url = RETAILERS[store].get("product_urls", {}).get(model.upper())
-    if confirmed_url:
+    def read_product(url):
         try:
-            html = fetch_retailer(confirmed_url)
+            html = fetch_retailer(url)
             if html:
-                return [_direct_product_offer(html, store, model, confirmed_url)]
+                return [_direct_product_offer(html, store, model, url)]
         except RuntimeError:
             pass
-        return [{"source": store, "sourceUrl": confirmed_url,
-                 "availability": "Price lookup unavailable; enter the retailer price"}]
+        # A blocked price request does not invalidate an already matched URL.
+        return [{"source": store, "sourceUrl": url,
+                 "availability": "Product page matched; enter the current retailer price"}]
+    confirmed_url = RETAILERS[store].get("product_urls", {}).get(model.upper())
+    if confirmed_url:
+        return read_product(confirmed_url)
     search = next(iter(CATEGORY_URLS[store].values()))
     domain = urlsplit(search).hostname.removeprefix("www.")
     try:
@@ -827,12 +830,10 @@ def _lookup(store, model, key, name=""):
                 return [{'source': store, 'sourceUrl': results[0]['sourceUrl'],
                          'priceIsAmbiguous': True,
                          'availability': 'Multiple seller prices; enter the price of your chosen offer'}]
-            detail = fetch_retailer(results[0]['sourceUrl'])
-            return [_direct_product_offer(detail, store, model, results[0]['sourceUrl'])] if detail else []
+            return read_product(results[0]['sourceUrl'])
         link = _product_link_from_html(html, store, model, name or model)
         if link:
-            detail = fetch_retailer(link['sourceUrl'])
-            return [_direct_product_offer(detail, store, model, link['sourceUrl'])] if detail else [link]
+            return read_product(link['sourceUrl'])
         return []
     except Exception:
         return []

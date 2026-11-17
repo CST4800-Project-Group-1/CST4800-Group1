@@ -1,5 +1,20 @@
 # SCRUM-22 / SCRUM-23 local code and test evidence
 
+## November 17 retailer product links
+
+Retailer rows retain matched product URLs even if the price fetch fails or a
+later response omits a URL. A matched link becomes clickable immediately rather
+than waiting for other retailer prices. Late link-only responses also update
+finished rows without overwriting manually entered prices. Links open the exact
+retailer product page in a new tab; unmatched names are disabled text without
+link styling. Search pages are never substituted for matched products.
+
+New tests cover early links during another pending lookup, late links after
+price failure, preserving entered prices, and URL retention after blocked
+product detail retrieval. **49 Python tests and 55 frontend/root tests pass**;
+TypeScript build/noEmit and whitespace checks pass. The Vercel deployment still
+needs to be updated and verified before merge.
+
 ## November 17 rate-limit fix (PR #11)
 
 Vlad reported that CPU-only loading in the Vercel preview coincided with provider

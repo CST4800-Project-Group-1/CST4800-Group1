@@ -334,7 +334,8 @@ function verifiedProductUrl(source, value) {
   try {
     const url = new URL(value);
     const rule = rules[source];
-    if (rule && url.protocol === 'https:' && (url.hostname === rule[0] || url.hostname.endsWith(`.${rule[0]}`)) && rule[1].test(url.pathname)) return url.href;
+    if (rule && url.protocol === 'https:' && !url.username && !url.password && !url.port
+        && (url.hostname === rule[0] || url.hostname.endsWith(`.${rule[0]}`)) && rule[1].test(url.pathname)) return url.href;
   } catch {}
   return null;
 }
@@ -392,6 +393,10 @@ function openPartDetails(part) {
     if (entered) offer = {...offer, priceCents: entered.priceCents,
       priceIsManual: true, priceUpdatedAt: entered.priceUpdatedAt};
     const existing = retailerRows.get(offer.source);
+    const productPage = verifiedProductUrl(offer.source, offer.sourceUrl)
+      || verifiedProductUrl(offer.source, existing?.offer.sourceUrl)
+      || (offer.source === part.source ? verifiedProductUrl(part.source, part.sourceUrl) : null);
+    if (productPage) offer = {...offer, sourceUrl: productPage};
     if (existing?.offer.priceCents && !offer.priceCents && !offer.priceIsAmbiguous) {
       offer = {...existing.offer, ...offer, priceCents: existing.offer.priceCents,
         priceUpdatedAt: existing.offer.priceUpdatedAt};
@@ -405,9 +410,14 @@ function openPartDetails(part) {
       link.href = productUrl;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
+      link.setAttribute('aria-label', `Open ${offer.source} product page for ${part.name}`);
+    } else {
+      link.setAttribute('aria-disabled', 'true');
     }
     const retailerMessage = offer.priceIsAmbiguous
       ? 'Multiple prices available. Check the retailer’s website and enter your chosen price.'
+      : !productUrl
+        ? offer.priceLoading ? 'Finding a matching product page…' : 'No verified product page found for this model.'
       : productUrl && !offer.priceCents
         ? 'Check the retailer’s website for current prices and available offers.'
         : offer.availability?.replaceAll('_', ' ') || 'Availability unknown';
@@ -498,7 +508,9 @@ function openPartDetails(part) {
     .then(response => { if (!response.ok) throw new Error('Links unavailable'); return response.json(); })
     .then(data => { for (const offer of data.offers || []) {
       const current = retailerRows.get(offer.source)?.offer;
-      if (!current || current.priceLoading) addOffer({...offer, priceLoading: true});
+      if (verifiedProductUrl(offer.source, offer.sourceUrl)) {
+        addOffer({...current, ...offer, priceLoading: current ? current.priceLoading === true : true});
+      }
     } })
     .catch(() => {});
   content.append(offers);
@@ -517,7 +529,16 @@ function openPartDetails(part) {
     const retailers = [...retailerRows.keys()].filter(source => source !== part.source);
     status.textContent = 'Checking retailer prices...';
     Promise.allSettled(retailers.map(source =>
-      loadRetailerPrice(source, part.model || part.name, matchName)
+      loadRetailerPrice(source, part.model || part.name, matchName).then(found => {
+        // Product links are useful immediately, even while another price is pending.
+        for (const offer of found) {
+          const current = retailerRows.get(source)?.offer;
+          if (current && verifiedProductUrl(source, offer.sourceUrl)) {
+            addOffer({...current, sourceUrl: offer.sourceUrl});
+          }
+        }
+        return found;
+      })
     )).then(results => {
       // Commit the complete batch in one render turn so rows finish together.
       results.forEach((result, index) => {
