@@ -49,14 +49,24 @@ Evidence expires at `expiresAt`, with `verifiedAt <= now < expiresAt` and a
 maximum one-hour lifetime. Missing evidence, invalid timestamps, future
 verification times, mismatched sources/raw values and unsupported methods
 cannot establish a match or mismatch. Catalog cache reads scrub invalid/expired
-metadata without changing prices. Catalog responses use `Cache-Control: no-store`.
+metadata without changing prices. Browser responses use `Cache-Control: no-store`.
+Vercel uses a separate `Vercel-CDN-Cache-Control` lifetime bounded by catalog
+age and the earliest socket expiry, with a two-second margin. It never permits
+stale-while-revalidate or stale-if-error. Errors are not cached.
 A failed listing refresh returns HTTP 503; it never returns the old cached success.
 
-The importer attempts four concurrent detail fetches within an 18-second
-category budget, each fetch using at most eight seconds of remaining budget.
-An empty plain detail response may retry rendered specs within that budget.
+The importer attempts at most three sequential detail fetches within an
+18-second category budget, each fetch using at most eight seconds of remaining
+budget. Optional specs never retry rendered pages. Provider calls are serialized
+within each worker; HTTP 429 starts a Retry-After cooldown and never triggers
+a rendered retry. A local worker lock is not an account-wide distributed limit.
 Queued/timed-out/unverified products remain unknown. There is no guarantee every
-record will have retrievable evidence on every request. Credentials remain
+record will have retrievable evidence on every request. The website first loads
+all seven categories with `metadata=0` (listings only), then requests CPU and
+motherboard metadata. A metadata failure leaves those prices visible and sockets
+unknown. A warm worker reuses the listing snapshot during enrichment; Vercel's
+shared response cache reduces repeated work across worker instances.
+Credentials remain
 server-side; use the existing environment/local configuration.
 
 ## Rule contract for Micquaya

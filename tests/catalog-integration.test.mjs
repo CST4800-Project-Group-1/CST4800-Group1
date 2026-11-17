@@ -61,6 +61,23 @@ test('all seven categories, add, replace, remove, clear, persistence, refresh an
   assert.equal(h.get('export').disabled,true);assert.equal(h.get('build-count').textContent,0);
 });
 
+test('all seven listings load before optional socket failure and remain visible',async()=>{
+  const h=await setup();
+  const requests=[];
+  h.setResponse((category,url)=>{
+    requests.push(url);
+    if(url.searchParams.get('metadata')!=='0')return null;
+    return {status:'success',data:{parts:[part(category)]}};
+  });
+  await h.context.refresh();
+  assert.deepEqual(requests.slice(0,7).map(url=>url.searchParams.get('category')),categories);
+  assert.ok(requests.slice(0,7).every(url=>url.searchParams.get('metadata')==='0'));
+  assert.equal(h.context.inspect().parts.length,7);
+  h.add('cpu');h.add('motherboard');
+  assert.equal(h.get('socket-compatibility').dataset.state,'unknown');
+  assert.equal((await h.download()).socketCompatibility.status,'unknown');
+});
+
 for(const failedCategory of ['cpu','motherboard']) test(`${failedCategory} refresh failure cannot match or export cached compatibility`,async()=>{
   const h=await setup();h.add('cpu');h.add('motherboard');
   h.setResponse(category=>category===failedCategory?null:{status:'success',data:{parts:[part(category)]}});

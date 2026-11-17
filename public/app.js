@@ -157,6 +157,15 @@ function renderBuild() {
   renderCompatibility();
 }
 
+function validCategoryPayload(payload, categoryName) {
+  return payload.status === 'success' && Array.isArray(payload.data?.parts)
+    && payload.data.parts.every(part => part && part.category === categoryName
+      && typeof part.id === 'string' && part.id.trim()
+      && typeof part.name === 'string' && part.name.trim()
+      && Number.isSafeInteger(part.priceCents) && part.priceCents > 0)
+    && new Set(payload.data.parts.map(part => part.id)).size === payload.data.parts.length;
+}
+
 async function load() {
   let cached = null;
   if (catalogLoading) return;
@@ -182,15 +191,11 @@ async function load() {
   const failedCategories = [];
   for (const categoryName of catalogCategories) {
     try {
-      const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}`);
+      // List every category before spending provider requests on optional specs.
+      const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}&metadata=0`);
       if (!response.ok) throw new Error('Category request failed');
       const payload = await response.json();
-      if (payload.status !== 'success' || !Array.isArray(payload.data?.parts)
-          || !payload.data.parts.every(part => part && part.category === categoryName
-            && typeof part.id === 'string' && part.id.trim()
-            && typeof part.name === 'string' && part.name.trim()
-            && Number.isSafeInteger(part.priceCents) && part.priceCents > 0)
-          || new Set(payload.data.parts.map(part => part.id)).size !== payload.data.parts.length) {
+      if (!validCategoryPayload(payload, categoryName)) {
         throw new Error('Category response is invalid');
       }
       parts = [
@@ -226,6 +231,26 @@ async function load() {
     }
   }
 
+  for (const categoryName of ['cpu', 'motherboard']) {
+    if (!socketCategoriesReady.has(categoryName)) continue;
+    socketCategoriesReady.delete(categoryName);
+    renderCompatibility();
+    try {
+      const response = await fetch(`/v1/parts?category=${categoryName}`);
+      if (!response.ok) throw new Error('Socket metadata unavailable');
+      const payload = await response.json();
+      if (!validCategoryPayload(payload, categoryName)) throw new Error('Invalid socket metadata');
+      const refreshed = new Map(payload.data.parts.map(part => [part.id, part]));
+      parts = parts.map(part => part.category === categoryName
+        ? {...part, specs: refreshed.get(part.id)?.specs || {socket:null,socketProvenance:null}}
+        : part);
+      socketCategoriesReady.add(categoryName);
+    } catch {
+      parts = parts.map(part => part.category === categoryName
+        ? {...part, specs: {...part.specs, socket:null, socketProvenance:null}} : part);
+    }
+    renderBuild();
+  }
   catalogLoading = false;
   renderParts();
   if (failedCategories.length) {

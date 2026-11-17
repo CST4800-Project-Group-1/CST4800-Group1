@@ -1,5 +1,47 @@
 # SCRUM-22 / SCRUM-23 local code and test evidence
 
+## November 17 rate-limit fix (PR #11)
+
+Vlad reported that CPU-only loading in the Vercel preview coincided with provider
+429s. Inspection found optional socket detail fan-out, rendered retries on 429,
+and `no-store` preventing shared response caching. The correction:
+
+- Load all seven listing categories before optional CPU/motherboard specs.
+- Cap enrichment at three sequential detail requests per category; no rendered
+  retries for optional specs. Failed specs preserve prices and remain unknown.
+- Serialize provider requests within a worker, pace their starts, and honor
+  Retry-After (seconds or HTTP date) on 429. Never retry a rate limit as rendered.
+- Permit Vercel shared caching only until the earlier of the catalog's one-hour
+  age and its earliest socket expiry (minus two seconds). Browser caching remains
+  disabled, expired data is not served as a stale success, and failures are not cached.
+- Remove tracked Python bytecode and the temporary Best Buy HTML dump; ignore
+  future bytecode and temporary HTML files. Keep the source, tests and evidence.
+
+New tests cover the cold seven-category request budget, listing-before-spec
+ordering, metadata failure preserving all categories, cache reuse, bounded shared
+cache lifetimes, serialized requests and provider cooldown.
+November 17 local checks: **47 Python tests passed** (including all 21 price
+tests), **53 frontend/root Node tests passed**, TypeScript build/noEmit and
+`git diff --check` passed. Historical results
+and live capture below describe the earlier revision. A corrected Vercel preview
+still needs verification before merge; no deployed success is implied here.
+
+The supplied site `https://cst-4800-group1.vercel.app/` and its `/app.js` returned
+HTTP 200 during inspection. That deployed JavaScript did not contain the new
+listing-first (`metadata=0`) flow; it cannot validate this revision yet.
+
+Live checks through the corrected local API handler, using the existing ZenRows
+key without printing it, returned HTTP 200 for all seven listing-only categories:
+CPU 25, motherboard 2, graphics card 25, RAM 25, storage 25, power supply 25,
+and case 25 records. Every success included bounded shared-cache headers.
+This verifies current live retrieval with the changed code locally; it does not
+verify Vercel deployment or that future account-wide 429s cannot occur.
+
+[Vercel cache header reference](https://vercel.com/docs/caching/cache-control-headers)
+documents the separate shared-cache header and its priority over browser headers.
+
+## Original implementation verification
+
 Implementation and verification: November 11, 2026 (America/New_York).
 Capture timestamps are UTC, so the saved capture is dated November 12 UTC.
 Qi implemented the live metadata API and completed the supplied Howard rule
