@@ -99,7 +99,7 @@ class _VisibleProductText(HTMLParser):
 
     def handle_data(self, data):
         if not self.hidden:
-            value = re.sub(r"\\s+", " ", data).strip()
+            value = re.sub(r"\s+", " ", data).strip()
             if value:
                 self.tokens.append(value)
 
@@ -112,16 +112,16 @@ def _labeled_spec_socket(html, part):
     model = part.get("model")
     if not isinstance(model, str) or not model.strip():
         return None
-    compact = lambda value: re.sub(r"\\s+", " ", value).strip().casefold()
+    compact = lambda value: re.sub(r"\s+", " ", value).strip().casefold()
     # Accept only a page identifying the exact manufacturer part number.
-    id_pattern = r"\\bMFR\\s*#\\s*" + re.escape(compact(model)) + r"(?=\\s|$)"
+    id_pattern = r"\bMFR\s*#\s*" + re.escape(compact(model)) + r"(?=\s|$)"
     if not re.search(id_pattern, compact(text)):
         return None
     # The socket must appear as an explicitly labeled specification field,
     # not as a marketing bullet, title, chipset name, or descriptive sentence.
     matches = []
     for match in re.finditer(
-        r"\\b(CPU Socket|Processor Socket|Socket Type)\\s*:?\\s*(AM4|AM5|LGA1700)\\b",
+        r"\b(CPU Socket|Processor Socket|Socket Type)\s*:?\s*(AM4|AM5|LGA1700)\b",
         text, flags=re.I):
         matches.append((normalize_socket(match.group(2)), match.group(1), match.group(2)))
     values = {item[0] for item in matches}
