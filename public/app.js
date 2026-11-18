@@ -24,6 +24,7 @@ let catalogLoading = false;
 let socketCategoriesReady = new Set();
 let socketExpiryTimer = null;
 let loadedCategories = 0;
+let providerRetryUntil = 0;
 
 const $ = id => document.getElementById(id);
 const money = cents => new Intl.NumberFormat('en-US', {
@@ -174,10 +175,18 @@ async function loadSelectedSocket(categoryName) {
   socketRequestVersions.set(categoryName, version);
   socketCategoriesReady.delete(categoryName);
   renderCompatibility();
-  if (!id) return;
+  if (!id || Date.now() < providerRetryUntil) return;
   try {
     const response = await fetch(`/v1/parts?category=${categoryName}&socketPartId=${encodeURIComponent(id)}`, {cache: 'no-store'});
-    if (!response.ok) throw new Error('Selected socket metadata unavailable');
+    if (!response.ok) {
+      if (response.status === 503) {
+        const detail = await response.json().catch(() => ({}));
+        if (Number.isFinite(detail.retryAfterSeconds) && detail.retryAfterSeconds > 0) {
+          providerRetryUntil = Math.max(providerRetryUntil, Date.now() + detail.retryAfterSeconds * 1000);
+        }
+      }
+      throw new Error('Selected socket metadata unavailable');
+    }
     const payload = await response.json();
     if (!validCategoryPayload(payload, categoryName)) throw new Error('Invalid socket metadata');
     if (socketRequestVersions.get(categoryName) !== version || build[categoryName] !== id) return;
@@ -197,6 +206,11 @@ async function loadSelectedSocket(categoryName) {
 async function load() {
   let cached = null;
   if (catalogLoading) return;
+  if (Date.now() < providerRetryUntil) {
+    $('status').textContent = 'Retailer service is temporarily rate limited. Try refreshing after the cooldown.';
+    $('retry').hidden = false;
+    return;
+  }
   catalogLoading = true;
   $('refresh-catalog').disabled = true;
   socketCategoriesReady.clear();
@@ -230,6 +244,9 @@ async function load() {
           if (Number.isFinite(detail.retryAfterSeconds)) {
             const remainder = catalogCategories.slice(catalogCategories.indexOf(categoryName));
             failedCategories.push(...remainder);
+            if (detail.retryAfterSeconds > 0) {
+              providerRetryUntil = Math.max(providerRetryUntil, Date.now() + detail.retryAfterSeconds * 1000);
+            }
             break;
           }
         }
@@ -275,7 +292,7 @@ async function load() {
   // Only fetch details for the selected CPU and motherboard, not the
   // first three unrelated products in each category.
   for (const categoryName of ['cpu', 'motherboard']) {
-    if (build[categoryName] && socketCategoriesReady.has(categoryName)) {
+    if (Date.now() >= providerRetryUntil && build[categoryName] && socketCategoriesReady.has(categoryName)) {
       await loadSelectedSocket(categoryName);
     }
   }
