@@ -1,4 +1,5 @@
 import {evaluateSocketCompatibility} from './socket-compatibility.js';
+import {createBuildPdf} from './build-pdf.js';
 const labels = {
   cpu: 'CPU',
   motherboard: 'Motherboard',
@@ -373,24 +374,33 @@ $('clear').onclick = () => {
 };
 $('export').onclick = () => {
   const chosen = selectedParts();
+  if (!chosen.length) return;
   const snapshot = socketSnapshot();
   renderCompatibility(snapshot);
-  const data = {
-    isSampleData,
-    compatibilityChecked: false,
-    socketCompatibility: snapshot.result,
-    socketEvaluation: snapshot.evaluation,
-    parts: chosen.map(part => ({...part,
-      catalogSourceUrl: parts.find(item => item.id === part.id && item.category === part.category)?.sourceUrl || null,
-    })),
-    totalCents: chosen.reduce((sum, part) => sum + part.priceCents, 0),
-  };
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-  const link = node('a');
-  link.href = url;
-  link.download = 'buildlab-build.json';
-  link.click();
-  URL.revokeObjectURL(url);
+  const totalCents = chosen.reduce((sum, part) => sum + part.priceCents, 0);
+  try {
+    const pdf = createBuildPdf({
+      parts: chosen.map(part => ({
+        ...part,
+        catalogSourceUrl: parts.find(item =>
+          item.id === part.id && item.category === part.category)?.sourceUrl || null,
+      })),
+      labels, isSampleData, totalCents,
+      socketCompatibility: snapshot.result,
+      socketEvaluation: snapshot.evaluation,
+      generatedAt: new Date().toISOString(),
+    });
+    const url = URL.createObjectURL(pdf);
+    const link = node('a');
+    link.href = url;
+    link.download = 'buildlab-pc-build.pdf';
+    link.click();
+    // The browser may process the click on a later task; do not revoke immediately.
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (error) {
+    console.error('Could not generate the build PDF.', error);
+    $('status').textContent = 'Unable to generate the PDF report. Please try again.';
+  }
 };
 
 const retailerPriceCache = new Map();
