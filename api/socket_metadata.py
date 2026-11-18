@@ -114,7 +114,7 @@ def _labeled_spec_socket(html, part):
         return None
     compact = lambda value: re.sub(r"\s+", " ", value).strip().casefold()
     # Accept only a page identifying the exact manufacturer part number.
-    id_pattern = r"\bMFR\s*#\s*" + re.escape(compact(model)) + r"(?=\s|$)"
+    id_pattern = r"\bmfr\s*#\s*" + re.escape(compact(model)) + r"(?=\s|$)"
     if not re.search(id_pattern, compact(text)):
         return None
     # The socket must appear as an explicitly labeled specification field,
