@@ -1,12 +1,11 @@
 # SCRUM-24: site and downloaded socket results
 
 Jira: https://cst-4800-group1.atlassian.net/browse/SCRUM-24
-Dependency: PR #11, SCRUM-22/SCRUM-23 at 706f83c3a43b50b49430eaef0ef3e8cc874b6961.
-This branch includes that verified metadata and rule revision. PR #12 targets main
-and carries the complete SCRUM-24 integration, including its SCRUM-22/SCRUM-23
-inputs. Review those included changes together; a separate merge of PR #11 is
-not required for this branch to contain the dependency. Required repository
-approvals and deployment verification still apply.
+Dependency: PR #11, SCRUM-22/SCRUM-23 through 0c7bdf9ce510e3526f20c8d1505ba7df30a8ed13.
+PR #12 targets Qi's feature/qixin-chen branch for a focused SCRUM-24 diff.
+The branch includes that metadata/rule revision and the tested conflict resolution.
+Coordinate final integration into main after PR #11; required repository approvals
+and deployment verification still apply.
 
 ## Behavior
 
