@@ -471,7 +471,7 @@ def _fetch_page_uncached(url, api_key, js_render=False, options=None, timeout=No
     except (TimeoutError, URLError):
         raise RuntimeError("ZenRows request failed or timed out.") from None
 
-def _enrich_sockets(parts, api_key):
+def _enrich_sockets(parts, api_key, allow_render=False):
     """Bound socket refresh work; unavailable evidence never removes price records."""
     deadline = time.monotonic() + 18
 
@@ -491,6 +491,16 @@ def _enrich_sockets(parts, api_key):
             # If the budget was exceeded, do not establish fresh compatibility.
             if html and time.monotonic() <= deadline:
                 part["specs"].update(extract_socket(html, part, time.time()))
+            # The provider often blocks unrendered B&H product detail pages.
+            # Retry rendering only for the explicitly selected product, never
+            # for the whole catalog. Keep the existing provider cooldown.
+            if allow_render and not part["specs"].get("socket"):
+                remaining = deadline - time.monotonic()
+                if remaining > 2:
+                    rendered = _fetch_page(url, api_key, js_render=True,
+                        options={"wait_for": "h1"}, timeout=min(12, remaining))
+                    if rendered and time.monotonic() <= deadline:
+                        part["specs"].update(extract_socket(rendered, part, time.time()))
         except (RuntimeError, ValueError, TypeError):
             return
 
@@ -552,7 +562,7 @@ def _category_catalog(category, include_sockets=True, selected_id=None):
         api_key = os.environ.get("ZENROWS_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError("ZENROWS_API_KEY is not configured.")
-        _enrich_sockets([selected], api_key)
+        _enrich_sockets([selected], api_key, allow_render=True)
         # Unknown is never a compatibility success. Cache short-lived failures
         # so repeated UI actions do not trigger another retailer lookup instantly.
         ttl = 60 if not fresh_socket(selected, time.time()) else CACHE_SECONDS
