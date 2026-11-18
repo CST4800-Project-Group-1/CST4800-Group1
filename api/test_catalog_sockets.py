@@ -163,6 +163,16 @@ class SocketApiTests(unittest.TestCase):
         self.assertNotIn("options", fetch.call_args.kwargs)
         self.assertLessEqual(fetch.call_args.kwargs["timeout"], 8)
 
+    def test_selected_detail_renders_only_after_plain_fetch_does_not_verify(self):
+        record = part()
+        with patch("api.catalog._fetch_page", side_effect=[None, page("AM4")]) as fetch:
+            catalog._enrich_sockets([record], "test", allow_render=True)
+        self.assertEqual(record["specs"]["socket"], "AM4")
+        self.assertEqual(fetch.call_count, 2)
+        self.assertFalse(fetch.call_args_list[0].kwargs.get("js_render", False))
+        self.assertTrue(fetch.call_args_list[1].kwargs.get("js_render", False))
+        self.assertEqual(fetch.call_args_list[1].kwargs["options"]["wait_for"], "h1")
+
     def test_exceeded_budget_cannot_establish_compatibility(self):
         record = part()
         with patch("api.catalog.time.monotonic", side_effect=[0, 0, 19, 19]), \
