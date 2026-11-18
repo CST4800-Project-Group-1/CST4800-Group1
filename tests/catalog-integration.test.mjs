@@ -26,12 +26,13 @@ async function setup() {
   vm.createContext(context);
   vm.runInContext(source+'\n globalThis.inspect = () => ({parts,build,isSampleData}); globalThis.refresh=load;',context);
   await new Promise(resolve=>setImmediate(resolve));
-  const add = id => {
+  const add = async id => {
     const details=get('parts').children.map(card=>card.children[1].children.at(-1).children[0]).find(button=>button['aria-label']===`View details for ${id}`);
     details.onclick();
     const offers=get('part-dialog-content').children.find(child=>child.className==='retailer-offers');
     const select=offers.children[0].children[1].children[1];
     select.onclick();
+    await new Promise(resolve=>setImmediate(resolve));
     assert.equal(select['aria-checked'],'true');
   };
   return {context,get,add,storage,timers,requests,setResponse:fn=>respond=fn,download:async()=>{get('export').onclick();return JSON.parse(await exported.text())}};
@@ -40,11 +41,11 @@ async function setup() {
 test('all seven categories, add, replace, remove, clear, persistence, refresh and download',async()=>{
   const h=await setup();
   assert.equal(h.context.inspect().parts.length,14);
-  for(const category of categories) h.add(category);
+  for(const category of categories) await h.add(category);
   assert.equal(h.get('total').textContent,'$7.00');
   assert.equal(h.get('build-count').textContent,7);
   assert.equal(h.get('socket-compatibility').dataset.state,'match');
-  h.add('motherboard-2');
+  await h.add('motherboard-2');
   assert.equal(h.get('socket-compatibility').dataset.state,'mismatch');
   assert.equal(h.get('build-count').textContent,7);
   const data=await h.download();
@@ -74,13 +75,13 @@ test('all seven listings load before optional socket failure and remain visible'
   assert.deepEqual(requests.slice(0,7).map(url=>url.searchParams.get('category')),categories);
   assert.ok(requests.slice(0,7).every(url=>url.searchParams.get('metadata')==='0'));
   assert.equal(h.context.inspect().parts.length,7);
-  h.add('cpu');h.add('motherboard');
+  await h.add('cpu');await h.add('motherboard');
   assert.equal(h.get('socket-compatibility').dataset.state,'unknown');
   assert.equal((await h.download()).socketCompatibility.status,'unknown');
 });
 
 for(const failedCategory of ['cpu','motherboard']) test(`${failedCategory} refresh failure cannot match or export cached compatibility`,async()=>{
-  const h=await setup();h.add('cpu');h.add('motherboard');
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
   h.setResponse(category=>category===failedCategory?null:{status:'success',data:{parts:[part(category)]}});
   await h.context.refresh();
   assert.equal(h.get('socket-compatibility').dataset.state,'unknown');
@@ -90,7 +91,7 @@ for(const failedCategory of ['cpu','motherboard']) test(`${failedCategory} refre
 });
 
 for(const invalid of ['missing socket','missing provenance','unsupported socket','stale socket','wrong category','error envelope','invalid price','duplicate IDs']) test(`${invalid} never enables a match`,async()=>{
-  const h=await setup();h.add('cpu');h.add('motherboard');
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
   h.setResponse(category=>{
     const p=part(category);
     if(invalid==='missing socket')p.specs={feature1:'AM5 text is not verified socket data'};
@@ -108,7 +109,7 @@ for(const invalid of ['missing socket','missing provenance','unsupported socket'
 });
 
 test('an open page drops a match when selected socket evidence expires',async()=>{
-  const h=await setup();h.add('cpu');h.add('motherboard');
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
   assert.equal(h.get('socket-compatibility').dataset.state,'match');
   const timer=[...h.timers.values()][0];
   assert.ok(timer.delay>0&&timer.delay<=3600000);
@@ -324,8 +325,8 @@ test('all seven categories use the same direct-link, price, and selection popup'
 test('SCRUM-24 downloads exactly the displayed four-state result and evaluation context', async()=>{
   for(const status of ['waiting','match','mismatch','unknown']){
     const h=await setup();
-    h.add('cpu');
-    if(status!=='waiting')h.add(status==='mismatch'?'motherboard-2':'motherboard');
+    await h.add('cpu');
+    if(status!=='waiting')await h.add(status==='mismatch'?'motherboard-2':'motherboard');
     if(status==='unknown')delete h.context.inspect().parts.find(p=>p.id==='cpu').specs.socketProvenance;
     const data=await h.download();
     assert.equal(data.socketCompatibility.status,status);
@@ -344,7 +345,7 @@ test('SCRUM-24 downloads exactly the displayed four-state result and evaluation 
 });
 
 test('SCRUM-24 checks expiry again at download and refreshes the displayed message',async()=>{
-  const h=await setup();h.add('cpu');h.add('motherboard');
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
   assert.equal(h.get('socket-compatibility').dataset.state,'match');
   h.context.inspect().parts.find(p=>p.id==='cpu').specs.socketProvenance.expiresAt=new Date(Date.now()-1).toISOString();
   const data=await h.download();
@@ -354,7 +355,7 @@ test('SCRUM-24 checks expiry again at download and refreshes the displayed messa
 });
 
 test('SCRUM-24 retailer selection preserves socket-source identity in downloaded evidence',async()=>{
-  const h=await setup();h.add('cpu');h.add('motherboard');
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
   const cpu=h.context.inspect().parts.find(p=>p.id==='cpu');
   h.setResponse(category=>category===null?{offers:[{source:'Amazon',sourceUrl:'https://www.amazon.com/dp/B0CK2DB8NY',priceCents:4999}]}:{status:'success',data:{parts:[part(category)]}});
   const details=h.get('parts').children.map(card=>card.children[1].children.at(-1).children[0]).find(button=>button['aria-label']==='View details for cpu');
