@@ -106,7 +106,8 @@ for(const invalid of ['missing socket','missing provenance','unsupported socket'
   await h.context.refresh();
   assert.equal(h.get('socket-compatibility').dataset.state,'unknown');
   assert.equal((await h.download()).socketCompatibility.status,'unknown');
-  assert.equal(h.timers.size,0);
+  // PDF blob URLs are revoked asynchronously; that timer is not socket expiry.
+  assert.equal([...h.timers.values()].filter(timer=>timer.delay!==60000).length,0);
 });
 
 test('an open page drops a match when selected socket evidence expires',async()=>{
