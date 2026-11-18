@@ -171,6 +171,46 @@ def extract_socket(html, part, verified_at):
     }}
 
 
+# Manually reviewed, exact manufacturer model + B&H product-page pairs.
+# These are stable hardware specifications, not live retailer availability.
+# Add models only after checking the manufacturer's published specification.
+MANUFACTURER_SOCKET_REFERENCES = {
+    ("cpu", "100-100001905BOX"): {
+        "socket": "AM4",
+        "retailerUrl": "https://www.bhphotovideo.com/c/product/2007607-REG/amd_100_100001905box_ryzen_5_5500f_6_core.html",
+        "sourceUrl": "https://www.amd.com/en/products/processors/desktops/ryzen/5000-series/amd-ryzen-5-5500f.html",
+        "sourceField": "CPU Socket",
+        "reviewedOn": "2026-11-18",
+    },
+    ("motherboard", "X870 EAGLE WIFI7"): {
+        "socket": "AM5",
+        "retailerUrl": "https://www.bhphotovideo.com/c/product/1852679-REG/gigabyte_x870_eagle_wifi7_motherboard.html",
+        "sourceUrl": "https://www.gigabyte.com/Motherboard/X870-EAGLE-WIFI7-rev-1x/sp",
+        "sourceField": "CPU",
+        "reviewedOn": "2026-11-18",
+    },
+}
+
+
+def manufacturer_reference(category, model, retailer_url):
+    """Return only reviewed exact-model facts, with the original manufacturer source."""
+    if not isinstance(model, str) or not isinstance(category, str):
+        return {"socket": None, "socketProvenance": None}
+    item = MANUFACTURER_SOCKET_REFERENCES.get((category, model.strip().upper()))
+    if not item or canonical_url(retailer_url) != canonical_url(item["retailerUrl"]):
+        return {"socket": None, "socketProvenance": None}
+    return {
+        "socket": item["socket"],
+        "socketProvenance": {
+            "method": "manufacturer_spec_reference",
+            "sourceUrl": item["sourceUrl"],
+            "sourceField": item["sourceField"],
+            "rawValue": item["socket"],
+            "reviewedOn": item["reviewedOn"],
+        },
+    }
+
+
 def fresh_socket(part, now):
     specs = part.get("specs")
     if not isinstance(specs, dict):
@@ -178,6 +218,9 @@ def fresh_socket(part, now):
     socket, evidence = specs.get("socket"), specs.get("socketProvenance")
     if not isinstance(socket, str) or socket not in SUPPORTED_SOCKETS or not isinstance(evidence, dict):
         return False
+    if evidence.get("method") == "manufacturer_spec_reference":
+        reviewed = manufacturer_reference(part.get("category"), part.get("model"), part.get("sourceUrl"))
+        return reviewed["socket"] == socket and reviewed["socketProvenance"] == evidence
     if (evidence.get("method") != "explicit_product_spec"
             or not isinstance(evidence.get("sourceField"), str)
             or evidence["sourceField"].strip().casefold() not in SOCKET_FIELDS
