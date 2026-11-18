@@ -501,6 +501,12 @@ def _enrich_sockets(parts, api_key, allow_render=False):
                         options={"wait_for": "h1"}, timeout=min(12, remaining))
                     if rendered and time.monotonic() <= deadline:
                         part["specs"].update(extract_socket(rendered, part, time.time()))
+        except ProviderRateLimited:
+            # A selected-product lookup must tell the browser to respect the
+            # provider's cooldown, rather than silently returning empty specs.
+            if allow_render:
+                raise
+            return
         except (RuntimeError, ValueError, TypeError):
             return
 
