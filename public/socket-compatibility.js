@@ -1,6 +1,6 @@
 // SCRUM-23: extends Howard Heaven Jr.'s supplied rule with verified-evidence guards.
 // Justin's earlier SCRUM-14 examples remain credited in docs/socket-examples.md.
-const supportedSockets = new Set(['AM5', 'LGA1700']);
+const supportedSockets = new Set(['AM4', 'AM5', 'LGA1700']);
 
 const socketOf = part =>
   typeof part?.specs?.socket === 'string'
