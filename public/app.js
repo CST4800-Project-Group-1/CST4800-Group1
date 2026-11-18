@@ -262,7 +262,7 @@ async function load() {
             const remainder = catalogCategories.slice(catalogCategories.indexOf(categoryName));
             failedCategories.push(...remainder);
             if (detail.retryAfterSeconds > 0) {
-              providerRetryUntil = Math.max(providerRetryUntil, Date.now() + detail.retryAfterSeconds * 1000);
+              recordProviderCooldown(detail.retryAfterSeconds);
             }
             break;
           }
