@@ -82,6 +82,52 @@ def _properties(data):
                 yield item
 
 
+class _VisibleProductText(HTMLParser):
+    """Collect visible specification labels without evaluating embedded scripts."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.hidden = 0
+        self.tokens = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "noscript"):
+            self.hidden += 1
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "noscript") and self.hidden:
+            self.hidden -= 1
+
+    def handle_data(self, data):
+        if not self.hidden:
+            value = re.sub(r"\\s+", " ", data).strip()
+            if value:
+                self.tokens.append(value)
+
+
+def _labeled_spec_socket(html, part):
+    """B&H specification-table fallback; no names or feature-bullet inference."""
+    parser = _VisibleProductText()
+    parser.feed(html or "")
+    text = " ".join(parser.tokens)
+    model = part.get("model")
+    if not isinstance(model, str) or not model.strip():
+        return None
+    compact = lambda value: re.sub(r"\\s+", " ", value).strip().casefold()
+    # Accept only a page identifying the exact manufacturer part number.
+    id_pattern = r"\\bMFR\\s*#\\s*" + re.escape(compact(model)) + r"(?=\\s|$)"
+    if not re.search(id_pattern, compact(text)):
+        return None
+    # The socket must appear as an explicitly labeled specification field,
+    # not as a marketing bullet, title, chipset name, or descriptive sentence.
+    matches = []
+    for match in re.finditer(
+        r"\\b(CPU Socket|Processor Socket|Socket Type|Socket)\\s*:?\\s*(AM4|AM5|LGA1700)\\b",
+        text, flags=re.I):
+        matches.append((normalize_socket(match.group(2)), match.group(1), match.group(2)))
+    values = {item[0] for item in matches}
+    return matches[0] if len(values) == 1 and None not in values and matches else None
+
+
 def extract_socket(html, part, verified_at):
     """Require URL and exact MPN/model identity plus a labeled specification."""
     unknown = {"socket": None, "socketProvenance": None}
@@ -109,6 +155,10 @@ def extract_socket(html, part, verified_at):
                 if isinstance(field, str) and field.strip().casefold() in SOCKET_FIELDS:
                     raw = prop.get("value")
                     evidence.append((normalize_socket(raw), field.strip(), raw))
+    if not evidence:
+        labeled = _labeled_spec_socket(html, part)
+        if labeled:
+            evidence.append(labeled)
     values = {entry[0] for entry in evidence}
     if len(values) != 1 or None in values:
         return unknown
