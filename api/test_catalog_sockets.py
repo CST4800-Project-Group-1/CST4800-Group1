@@ -163,6 +163,14 @@ class SocketApiTests(unittest.TestCase):
         self.assertNotIn("options", fetch.call_args.kwargs)
         self.assertLessEqual(fetch.call_args.kwargs["timeout"], 8)
 
+    def test_selected_rate_limit_propagates_to_client(self):
+        record = part()
+        with patch("api.catalog._fetch_page", side_effect=catalog.ProviderRateLimited(55)):
+            with self.assertRaises(catalog.ProviderRateLimited) as caught:
+                catalog._enrich_sockets([record], "test", allow_render=True)
+        self.assertEqual(caught.exception.retry_after, 55)
+        self.assertIsNone(record["specs"]["socket"])
+
     def test_selected_detail_renders_only_after_plain_fetch_does_not_verify(self):
         record = part()
         with patch("api.catalog._fetch_page", side_effect=[None, page("AM4")]) as fetch:
