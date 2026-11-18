@@ -974,6 +974,13 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", cache_control)
         if status == 200 and body.get("status") == "success":
             ttl = _cdn_cache_seconds(body["data"])
+            selected_id = query.get("socketPartId", [None])[0]
+            if selected_id is not None:
+                chosen = next((p for p in body["data"]["parts"] if p["id"] == selected_id), None)
+                if not chosen or not fresh_socket(chosen, time.time()):
+                    # An unverified selected socket should not be cached for
+                    # the entire listing lifetime at the CDN layer.
+                    ttl = min(ttl, 60)
             self.send_header("Vercel-CDN-Cache-Control", "public, s-maxage={}".format(ttl) if ttl else "no-store")
         elif status != 200:
             self.send_header("Vercel-CDN-Cache-Control", "no-store")
