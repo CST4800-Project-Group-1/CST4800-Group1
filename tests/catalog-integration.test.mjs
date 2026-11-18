@@ -3,47 +3,50 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {evaluateSocketCompatibility} from '../public/socket-compatibility.js';
+import {createBuildPdf as generateRealBuildPdf} from '../public/build-pdf.js';
 import {verifiedPart} from './fixtures/socket-parts.mjs';
 
 const categories = ['cpu','motherboard','graphics_card','ram','storage','power_supply','case'];
 const part = (category, suffix = '', socket = 'AM5') => ({...verifiedPart(category,socket,Date.now(),suffix),name:category+suffix,manufacturer:'Example',priceCents:100});
-const source = readFileSync(new URL('../public/app.js',import.meta.url),'utf8').replace(/^import [^\r\n]*\r?\n/,'');
+const source = readFileSync(new URL('../public/app.js',import.meta.url),'utf8').replace(/^import [^\r\n]*\r?\n/gm,'');
 async function setup() {
   const elements = new Map(), storage = new Map();
   const timers = new Map();
+  const requests = [];
   let timerId=0;
   const el = () => ({value:'',dataset:{},classList:{toggle(){}},focus(){},showModal(){this.open=true},children:[],append(...items){this.children.push(...items)},replaceChildren(){this.children=[]},setAttribute(key,value){this[key]=value},click(){}});
   const get = id => {if(!elements.has(id)) elements.set(id,el()); return elements.get(id)};
   let respond = category => ({status:'success',data:{isSampleData:false,parts:[part(category),part(category,'-2','LGA1700')]}});
   let exported;
-  const context = {evaluateSocketCompatibility, document:{getElementById:get,createElement:el},
+  const context = {evaluateSocketCompatibility, createBuildPdf: args => new Blob([JSON.stringify({...args, compatibilityChecked:false})], {type:'application/json'}), document:{getElementById:get,createElement:el},
     setTimeout:(callback,delay)=>{timers.set(++timerId,{callback,delay});return timerId},
     clearTimeout:id=>timers.delete(id),
     localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},Intl,Blob,console,Set,JSON,
     URL:class extends URL {static createObjectURL(blob){exported=blob;return 'blob:test'} static revokeObjectURL(){}},
-    fetch:async url => {const category=new URL(url,'http://local').searchParams.get('category');const data=respond(category,new URL(url,'http://local'));return data===null?{ok:false}:{ok:true,json:async()=>data}}};
+    fetch:async (url, options) => {requests.push({url,options});const category=new URL(url,'http://local').searchParams.get('category');const data=respond(category,new URL(url,'http://local'));return data===null?{ok:false}:{ok:data?.httpStatus===undefined,status:data?.httpStatus||200,json:async()=>data}}};
   vm.createContext(context);
   vm.runInContext(source+'\n globalThis.inspect = () => ({parts,build,isSampleData}); globalThis.refresh=load;',context);
   await new Promise(resolve=>setImmediate(resolve));
-  const add = id => {
+  const add = async id => {
     const details=get('parts').children.map(card=>card.children[1].children.at(-1).children[0]).find(button=>button['aria-label']===`View details for ${id}`);
     details.onclick();
     const offers=get('part-dialog-content').children.find(child=>child.className==='retailer-offers');
     const select=offers.children[0].children[1].children[1];
     select.onclick();
+    await new Promise(resolve=>setImmediate(resolve));
     assert.equal(select['aria-checked'],'true');
   };
-  return {context,get,add,storage,timers,setResponse:fn=>respond=fn,download:async()=>{get('export').onclick();return JSON.parse(await exported.text())}};
+  return {context,get,add,storage,timers,requests,setResponse:fn=>respond=fn,download:async()=>{get('export').onclick();return JSON.parse(await exported.text())}};
 }
 
 test('all seven categories, add, replace, remove, clear, persistence, refresh and download',async()=>{
   const h=await setup();
   assert.equal(h.context.inspect().parts.length,14);
-  for(const category of categories) h.add(category);
+  for(const category of categories) await h.add(category);
   assert.equal(h.get('total').textContent,'$7.00');
   assert.equal(h.get('build-count').textContent,7);
   assert.equal(h.get('socket-compatibility').dataset.state,'match');
-  h.add('motherboard-2');
+  await h.add('motherboard-2');
   assert.equal(h.get('socket-compatibility').dataset.state,'mismatch');
   assert.equal(h.get('build-count').textContent,7);
   const data=await h.download();
@@ -73,13 +76,13 @@ test('all seven listings load before optional socket failure and remain visible'
   assert.deepEqual(requests.slice(0,7).map(url=>url.searchParams.get('category')),categories);
   assert.ok(requests.slice(0,7).every(url=>url.searchParams.get('metadata')==='0'));
   assert.equal(h.context.inspect().parts.length,7);
-  h.add('cpu');h.add('motherboard');
+  await h.add('cpu');await h.add('motherboard');
   assert.equal(h.get('socket-compatibility').dataset.state,'unknown');
   assert.equal((await h.download()).socketCompatibility.status,'unknown');
 });
 
 for(const failedCategory of ['cpu','motherboard']) test(`${failedCategory} refresh failure cannot match or export cached compatibility`,async()=>{
-  const h=await setup();h.add('cpu');h.add('motherboard');
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
   h.setResponse(category=>category===failedCategory?null:{status:'success',data:{parts:[part(category)]}});
   await h.context.refresh();
   assert.equal(h.get('socket-compatibility').dataset.state,'unknown');
@@ -89,7 +92,7 @@ for(const failedCategory of ['cpu','motherboard']) test(`${failedCategory} refre
 });
 
 for(const invalid of ['missing socket','missing provenance','unsupported socket','stale socket','wrong category','error envelope','invalid price','duplicate IDs']) test(`${invalid} never enables a match`,async()=>{
-  const h=await setup();h.add('cpu');h.add('motherboard');
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
   h.setResponse(category=>{
     const p=part(category);
     if(invalid==='missing socket')p.specs={feature1:'AM5 text is not verified socket data'};
@@ -103,11 +106,12 @@ for(const invalid of ['missing socket','missing provenance','unsupported socket'
   await h.context.refresh();
   assert.equal(h.get('socket-compatibility').dataset.state,'unknown');
   assert.equal((await h.download()).socketCompatibility.status,'unknown');
-  assert.equal(h.timers.size,0);
+  // PDF blob URLs are revoked asynchronously; that timer is not socket expiry.
+  assert.equal([...h.timers.values()].filter(timer=>timer.delay!==60000).length,0);
 });
 
 test('an open page drops a match when selected socket evidence expires',async()=>{
-  const h=await setup();h.add('cpu');h.add('motherboard');
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
   assert.equal(h.get('socket-compatibility').dataset.state,'match');
   const timer=[...h.timers.values()][0];
   assert.ok(timer.delay>0&&timer.delay<=3600000);
@@ -318,4 +322,125 @@ test('all seven categories use the same direct-link, price, and selection popup'
     assert.equal(h.context.inspect().build[category],category);
   }
   assert.equal(h.get('total').textContent,'$3,003.00');
+});
+
+test('SCRUM-24 downloads exactly the displayed four-state result and evaluation context', async()=>{
+  for(const status of ['waiting','match','mismatch','unknown']){
+    const h=await setup();
+    await h.add('cpu');
+    if(status!=='waiting')await h.add(status==='mismatch'?'motherboard-2':'motherboard');
+    if(status==='unknown')delete h.context.inspect().parts.find(p=>p.id==='cpu').specs.socketProvenance;
+    const data=await h.download();
+    assert.equal(data.socketCompatibility.status,status);
+    assert.equal(h.get('socket-compatibility').dataset.state,status);
+    assert.equal(data.socketCompatibility.message,h.get('compatibility-message').textContent);
+    assert.equal(data.socketCompatibility.scope,'socket-only');
+    assert.equal(data.socketCompatibility.biosChecked,false);
+    assert.equal(data.socketCompatibility.fullBuildChecked,false);
+    assert.equal(data.compatibilityChecked,false);
+    assert.equal(data.socketEvaluation.cpuPartId,'cpu');
+    assert.equal(data.socketEvaluation.motherboardPartId,status==='waiting'?null:status==='mismatch'?'motherboard-2':'motherboard');
+    assert.ok(Number.isFinite(Date.parse(data.socketEvaluation.evaluatedAt)));
+    assert.equal(data.socketEvaluation.refreshState,'ready');
+    assert.match(h.get('compatibility-checked-at').textContent,/Downloads include this result/);
+  }
+});
+
+test('SCRUM-24 checks expiry again at download and refreshes the displayed message',async()=>{
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
+  assert.equal(h.get('socket-compatibility').dataset.state,'match');
+  h.context.inspect().parts.find(p=>p.id==='cpu').specs.socketProvenance.expiresAt=new Date(Date.now()-1).toISOString();
+  const data=await h.download();
+  assert.equal(data.socketCompatibility.status,'unknown');
+  assert.equal(data.socketCompatibility.message,h.get('compatibility-message').textContent);
+  assert.equal(h.get('socket-compatibility').dataset.state,'unknown');
+});
+
+test('SCRUM-24 retailer selection preserves socket-source identity in downloaded evidence',async()=>{
+  const h=await setup();await h.add('cpu');await h.add('motherboard');
+  const cpu=h.context.inspect().parts.find(p=>p.id==='cpu');
+  h.setResponse(category=>category===null?{offers:[{source:'Amazon',sourceUrl:'https://www.amazon.com/dp/B0CK2DB8NY',priceCents:4999}]}:{status:'success',data:{parts:[part(category)]}});
+  const details=h.get('parts').children.map(card=>card.children[1].children.at(-1).children[0]).find(button=>button['aria-label']==='View details for cpu');
+  details.onclick();await new Promise(resolve=>setImmediate(resolve));
+  const rows=h.get('part-dialog-content').children.find(child=>child.className==='retailer-offers').children;
+  rows[1].children[1].children[1].onclick();
+  await new Promise(resolve=>setImmediate(resolve));
+  const data=await h.download();
+  assert.equal(data.socketCompatibility.status,'match');
+  assert.equal(data.totalCents,5099);
+  const savedCpu=data.parts.find(p=>p.id==='cpu');
+  assert.equal(savedCpu.sourceUrl,'https://www.amazon.com/dp/B0CK2DB8NY');
+  assert.equal(savedCpu.catalogSourceUrl,cpu.sourceUrl);
+  assert.equal(data.socketEvaluation.cpuSourceUrl,cpu.sourceUrl);
+  assert.equal(savedCpu.specs.socketProvenance.sourceUrl,cpu.sourceUrl);
+});
+
+
+test('merged loader keeps list-first requests and bypasses browser cache for both phases', async()=>{
+  const h=await setup();
+  const requests=h.requests.filter(request=>request.url.startsWith('/v1/parts?'));
+  assert.equal(requests.length,7);
+  assert.deepEqual(requests.slice(0,7).map(request=>new URL(request.url,'http://local').searchParams.get('category')),categories);
+  for(const request of requests.slice(0,7))assert.equal(new URL(request.url,'http://local').searchParams.get('metadata'),'0');
+  // With no CPU/motherboard selected, no optional detail request is made.
+  assert.equal(requests.slice(7).length,0);
+  for(const request of requests)assert.equal(request.options.cache,'no-store');
+});
+
+test('selected fourth CPU and motherboard are enriched, not merely first three',async()=>{
+  const h=await setup();
+  h.setResponse(category=>({status:'success',data:{parts:[
+    part(category),part(category,'-2','LGA1700'),part(category,'-3','AM4'),part(category,'-4','AM4'),
+  ]}}));
+  await h.context.refresh();
+  await h.add('cpu-4');
+  await h.add('motherboard-4');
+  assert.equal(h.get('socket-compatibility').dataset.state,'match');
+  const targeted=h.requests.map(item=>new URL(item.url,'http://local'))
+    .filter(url=>url.searchParams.has('socketPartId'));
+  assert.ok(targeted.some(url=>url.searchParams.get('socketPartId')==='cpu-4'));
+  assert.ok(targeted.some(url=>url.searchParams.get('socketPartId')==='motherboard-4'));
+});
+
+test('provider cooldown stops the remaining category requests',async()=>{
+  const h=await setup();
+  const before=h.requests.length;
+  h.setResponse((category,url)=>category==='motherboard' && url.searchParams.get('metadata')==='0'
+    ?{httpStatus:503,error:'Retailer fetch service is rate limited.',retryAfterSeconds:55}
+    :{status:'success',data:{parts:[part(category)]}});
+  await h.context.refresh();
+  const requests=h.requests.slice(before).map(item=>new URL(item.url,'http://local'));
+  assert.deepEqual(requests.map(url=>url.searchParams.get('category')),['cpu','motherboard']);
+  assert.equal(h.get('retry').hidden,false);
+});
+
+test('provider cooldown persists and prevents repeated refresh while retaining cached parts',async()=>{
+  const h=await setup();
+  const originalCount=h.context.inspect().parts.length;
+  h.setResponse((category,url)=>category==='cpu' && url.searchParams.get('metadata')==='0'
+    ?{httpStatus:503,error:'Retailer fetch service is rate limited.',retryAfterSeconds:55}
+    :{status:'success',data:{parts:[part(category)]}});
+  await h.context.refresh();
+  const attempted=h.requests.length;
+  assert.ok(Number(h.storage.get('buildlab-provider-cooldown-v1'))>Date.now());
+  await h.context.refresh();
+  assert.equal(h.requests.length,attempted);
+  assert.equal(h.context.inspect().parts.length,originalCount);
+  assert.match(h.get('status').textContent,/rate limited.*Retry in about/);
+});
+
+test('real PDF writer includes selected prices, mismatch, specification sources and valid PDF structure',async()=>{
+  const cpu=part('cpu','','AM4'), motherboard=part('motherboard','','AM5');
+  const result=evaluateSocketCompatibility(cpu,motherboard);
+  const blob=generateRealBuildPdf({
+    parts:[cpu,motherboard],labels:{cpu:'CPU',motherboard:'Motherboard'},
+    totalCents:200,socketCompatibility:result,socketEvaluation:{evaluatedAt:new Date().toISOString()},
+  });
+  assert.equal(blob.type,'application/pdf');
+  const text=Buffer.from(await blob.arrayBuffer()).toString('latin1');
+  assert.ok(text.startsWith('%PDF-1.4'));
+  assert.match(text,/SOCKET MISMATCH/);
+  assert.match(text,/\$2\.00/);
+  assert.match(text,/%%EOF$/);
+  assert.match(text,/CPU and motherboard socket check/i);
 });

@@ -1,4 +1,5 @@
 import {evaluateSocketCompatibility} from './socket-compatibility.js';
+import {createBuildPdf} from './build-pdf.js';
 const labels = {
   cpu: 'CPU',
   motherboard: 'Motherboard',
@@ -24,6 +25,21 @@ let catalogLoading = false;
 let socketCategoriesReady = new Set();
 let socketExpiryTimer = null;
 let loadedCategories = 0;
+const PROVIDER_COOLDOWN_KEY = 'buildlab-provider-cooldown-v1';
+let providerRetryUntil = 0;
+try {
+  const savedUntil = Number(localStorage.getItem(PROVIDER_COOLDOWN_KEY));
+  if (Number.isFinite(savedUntil) && savedUntil > Date.now()) providerRetryUntil = savedUntil;
+} catch {}
+function recordProviderCooldown(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return;
+  providerRetryUntil = Math.max(providerRetryUntil, Date.now() + Math.min(seconds, 3600) * 1000);
+  try { localStorage.setItem(PROVIDER_COOLDOWN_KEY, String(providerRetryUntil)); } catch {}
+}
+function cooldownMessage() {
+  const seconds = Math.ceil(Math.max(0, providerRetryUntil - Date.now()) / 1000);
+  return `Retailer service is rate limited. Retry in about ${seconds} seconds. Saved catalog prices may be outdated; socket checks remain unknown until verified.`;
+}
 
 const $ = id => document.getElementById(id);
 const money = cents => new Intl.NumberFormat('en-US', {
@@ -166,10 +182,78 @@ function validCategoryPayload(payload, categoryName) {
     && new Set(payload.data.parts.map(part => part.id)).size === payload.data.parts.length;
 }
 
+const socketRequestVersions = new Map();
+async function loadSelectedSocket(categoryName) {
+  if (categoryName !== 'cpu' && categoryName !== 'motherboard') return;
+  const id = build[categoryName];
+  const version = (socketRequestVersions.get(categoryName) || 0) + 1;
+  socketRequestVersions.set(categoryName, version);
+  socketCategoriesReady.delete(categoryName);
+  renderCompatibility();
+  const selected = parts.find(part => part.id === id && part.category === categoryName);
+  if (!selected) return;
+  const current = () => socketRequestVersions.get(categoryName) === version && build[categoryName] === id;
+  const apply = specs => {
+    if (!current()) return false;
+    parts = parts.map(part => part.category === categoryName && part.id === id
+      ? {...part, specs: {...part.specs, ...specs}} : part);
+    socketCategoriesReady.add(categoryName);
+    renderBuild();
+    return true;
+  };
+
+  // Manufacturer-reviewed model facts do not need fresh retailer listings.
+  // Always try this even if ZenRows is in a rate-limit cooldown.
+  try {
+    const params = new URLSearchParams({
+      socketReference: '1', category: categoryName, socketPartId: id,
+      socketModel: selected.model || '', sourceUrl: selected.sourceUrl || '',
+    });
+    const response = await fetch(`/v1/parts?${params}`, {cache: 'no-store'});
+    if (response.ok) {
+      const body = await response.json();
+      if (!current()) return;
+      const data = body?.data;
+      if (body.status === 'success' && data?.id === id && data?.category === categoryName
+          && data?.specs?.socket && data?.specs?.socketProvenance?.method === 'manufacturer_spec_reference') {
+        apply(data.specs);
+        return;
+      }
+    }
+  } catch {
+    // An unavailable manufacturer reference cannot establish compatibility.
+  }
+  if (!current() || Date.now() < providerRetryUntil) return;
+
+  // Unknown models use the existing independently verified retailer detail path.
+  try {
+    const response = await fetch(`/v1/parts?category=${categoryName}&socketPartId=${encodeURIComponent(id)}`, {cache: 'no-store'});
+    if (!response.ok) {
+      if (response.status === 503) {
+        const detail = await response.json().catch(() => ({}));
+        recordProviderCooldown(detail.retryAfterSeconds);
+      }
+      throw new Error('Selected socket metadata unavailable');
+    }
+    const payload = await response.json();
+    if (!validCategoryPayload(payload, categoryName)) throw new Error('Invalid socket metadata');
+    if (!current()) return;
+    const verified = payload.data.parts.find(part => part.id === id);
+    if (!verified) throw new Error('Selected product missing from socket response');
+    apply(verified.specs || {socket: null, socketProvenance: null});
+  } catch {
+    if (!current()) return;
+    apply({socket: null, socketProvenance: null});
+    socketCategoriesReady.delete(categoryName);
+    renderCompatibility();
+  }
+}
+
 async function load() {
   let cached = null;
   if (catalogLoading) return;
   catalogLoading = true;
+  $('refresh-catalog').disabled = true;
   socketCategoriesReady.clear();
   renderCompatibility();
   loadedCategories = 0;
@@ -186,14 +270,41 @@ async function load() {
     renderBuild();
     renderParts();
   }
+  // Allow exact manufacturer socket checks even while ZenRows is rate limited.
+  for (const categoryName of ['cpu', 'motherboard']) {
+    if (build[categoryName]) await loadSelectedSocket(categoryName);
+  }
+  if (Date.now() < providerRetryUntil) {
+    catalogLoading = false;
+    $('refresh-catalog').disabled = false;
+    renderParts();
+    $('status').textContent = cooldownMessage();
+    $('retry').hidden = false;
+    return;
+  }
   $('retry').hidden = true;
 
   const failedCategories = [];
   for (const categoryName of catalogCategories) {
     try {
       // List every category before spending provider requests on optional specs.
-      const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}&metadata=0`);
-      if (!response.ok) throw new Error('Category request failed');
+      const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}&metadata=0`, {cache: 'no-store'});
+      if (!response.ok) {
+        // The provider explicitly requests a cooldown. Do not hammer every
+        // remaining category with requests known to be rate limited.
+        if (response.status === 503) {
+          const detail = await response.json().catch(() => ({}));
+          if (Number.isFinite(detail.retryAfterSeconds)) {
+            const remainder = catalogCategories.slice(catalogCategories.indexOf(categoryName));
+            failedCategories.push(...remainder);
+            if (detail.retryAfterSeconds > 0) {
+              recordProviderCooldown(detail.retryAfterSeconds);
+            }
+            break;
+          }
+        }
+        throw new Error('Category request failed');
+      }
       const payload = await response.json();
       if (!validCategoryPayload(payload, categoryName)) {
         throw new Error('Category response is invalid');
@@ -231,33 +342,21 @@ async function load() {
     }
   }
 
+  // Only fetch details for the selected CPU and motherboard, not the
+  // first three unrelated products in each category.
   for (const categoryName of ['cpu', 'motherboard']) {
-    if (!socketCategoriesReady.has(categoryName)) continue;
-    socketCategoriesReady.delete(categoryName);
-    renderCompatibility();
-    try {
-      const response = await fetch(`/v1/parts?category=${categoryName}`);
-      if (!response.ok) throw new Error('Socket metadata unavailable');
-      const payload = await response.json();
-      if (!validCategoryPayload(payload, categoryName)) throw new Error('Invalid socket metadata');
-      const refreshed = new Map(payload.data.parts.map(part => [part.id, part]));
-      parts = parts.map(part => part.category === categoryName
-        ? {...part, specs: refreshed.get(part.id)?.specs || {socket:null,socketProvenance:null}}
-        : part);
-      socketCategoriesReady.add(categoryName);
-    } catch {
-      parts = parts.map(part => part.category === categoryName
-        ? {...part, specs: {...part.specs, socket:null, socketProvenance:null}} : part);
-    }
-    renderBuild();
+    if (build[categoryName]) await loadSelectedSocket(categoryName);
   }
   catalogLoading = false;
+  $('refresh-catalog').disabled = false;
+  renderCompatibility();
   renderParts();
   if (failedCategories.length) {
     const failedLabels = failedCategories.map(name => labels[name]).join(', ');
-    $('status').textContent = parts.length
-      ? `Some categories did not load (${failedLabels}). Try again to refresh them.`
-      : 'The catalog could not load. Please try again.';
+    $('status').textContent = Date.now() < providerRetryUntil ? cooldownMessage()
+      : parts.length
+        ? `Some categories did not load (${failedLabels}). Try again to refresh them.`
+        : 'The catalog could not load. Please try again.';
     $('retry').hidden = false;
     if (!parts.length) $('result-count').textContent = 'Catalog unavailable';
   }
@@ -266,6 +365,7 @@ async function load() {
 $('search').oninput = renderParts;
 $('sort').onchange = renderParts;
 $('retry').onclick = load;
+$('refresh-catalog').onclick = load;
 $('clear').onclick = () => {
   build = {};
   save();
@@ -274,19 +374,33 @@ $('clear').onclick = () => {
 };
 $('export').onclick = () => {
   const chosen = selectedParts();
-  const data = {
-    isSampleData,
-    compatibilityChecked: false,
-    socketCompatibility: renderCompatibility(),
-    parts: chosen,
-    totalCents: chosen.reduce((sum, part) => sum + part.priceCents, 0),
-  };
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-  const link = node('a');
-  link.href = url;
-  link.download = 'buildlab-build.json';
-  link.click();
-  URL.revokeObjectURL(url);
+  if (!chosen.length) return;
+  const snapshot = socketSnapshot();
+  renderCompatibility(snapshot);
+  const totalCents = chosen.reduce((sum, part) => sum + part.priceCents, 0);
+  try {
+    const pdf = createBuildPdf({
+      parts: chosen.map(part => ({
+        ...part,
+        catalogSourceUrl: parts.find(item =>
+          item.id === part.id && item.category === part.category)?.sourceUrl || null,
+      })),
+      labels, isSampleData, totalCents,
+      socketCompatibility: snapshot.result,
+      socketEvaluation: snapshot.evaluation,
+      generatedAt: new Date().toISOString(),
+    });
+    const url = URL.createObjectURL(pdf);
+    const link = node('a');
+    link.href = url;
+    link.download = 'buildlab-pc-build.pdf';
+    link.click();
+    // The browser may process the click on a later task; do not revoke immediately.
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (error) {
+    console.error('Could not generate the build PDF.', error);
+    $('status').textContent = 'Unable to generate the PDF report. Please try again.';
+  }
 };
 
 const retailerPriceCache = new Map();
@@ -298,6 +412,7 @@ function storedRetailerPrices() {
   } catch { return []; }
 }
 function loadRetailerPrice(source, model, name) {
+  if (Date.now() < providerRetryUntil) return Promise.resolve([]);
   const key = JSON.stringify([source, model, name]);
   const cached = retailerPriceCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.promise;
@@ -456,6 +571,9 @@ function openPartDetails(part) {
       if (select.disabled) return;
       build[part.category] = part.id;
       save();
+      if (part.category === 'cpu' || part.category === 'motherboard') {
+        void loadSelectedSocket(part.category);
+      }
       selectedOffers.set(part.id, {
         source: chosenOffer.source, sourceUrl: chosenOffer.sourceUrl, priceCents: chosenOffer.priceCents,
         priceUpdatedAt: chosenOffer.priceUpdatedAt, availability: chosenOffer.availability,
@@ -596,21 +714,54 @@ $('part-dialog').onclick = event => {
 renderBuild();
 load();
 
-function renderCompatibility(){
-  const cpu=parts.find(p=>p.category==='cpu'&&p.id===build.cpu);
-  const motherboard=parts.find(p=>p.category==='motherboard'&&p.id===build.motherboard);
-  const result=evaluateSocketCompatibility(cpu,motherboard,{
-    refreshState:socketCategoriesReady.has('cpu') && socketCategoriesReady.has('motherboard')?'ready':catalogLoading?'loading':'failed'
-  });
-  clearTimeout(socketExpiryTimer);
-  const now=Date.now();
-  const nextExpiry=(result.status==='match'||result.status==='mismatch')
-    ?Math.min(...[cpu,motherboard].map(part=>Date.parse(part?.specs?.socketProvenance?.expiresAt)).filter(expiry=>expiry>now&&expiry-now<=3600000))
-    :Infinity;
-  socketExpiryTimer=Number.isFinite(nextExpiry)?setTimeout(renderCompatibility,nextExpiry-now+1):null;
-  $('socket-compatibility').dataset.state=result.status;
-  $('compatibility-title').textContent={waiting:'Waiting for selection',match:'Sockets match',mismatch:'Socket mismatch',unknown:'Compatibility unknown'}[result.status];
-  $('compatibility-message').textContent=result.message;
-  return result;
+function socketSnapshot() {
+  const cpu = parts.find(part => part.category === 'cpu' && part.id === build.cpu);
+  const motherboard = parts.find(part => part.category === 'motherboard' && part.id === build.motherboard);
+  const now = Date.now();
+  const refreshState = socketCategoriesReady.has('cpu') && socketCategoriesReady.has('motherboard')
+    ? 'ready' : catalogLoading ? 'loading' : 'failed';
+  return {
+    cpu, motherboard, now,
+    result: evaluateSocketCompatibility(cpu, motherboard, {now, refreshState}),
+    evaluation: {
+      evaluatedAt: new Date(now).toISOString(), refreshState,
+      cpuPartId: cpu?.id || null, motherboardPartId: motherboard?.id || null,
+      cpuSourceUrl: cpu?.sourceUrl || null, motherboardSourceUrl: motherboard?.sourceUrl || null,
+    },
+  };
 }
 
+function renderCompatibility(snapshot = socketSnapshot()) {
+  const {cpu, motherboard, now, result} = snapshot;
+  clearTimeout(socketExpiryTimer);
+  const nextExpiry = (result.status === 'match' || result.status === 'mismatch')
+    ? Math.min(...[cpu, motherboard].map(part => Date.parse(part?.specs?.socketProvenance?.expiresAt))
+      .filter(expiry => expiry > now && expiry - now <= 3600000))
+    : Infinity;
+  socketExpiryTimer = Number.isFinite(nextExpiry)
+    ? setTimeout(renderCompatibility, nextExpiry - now + 1) : null;
+  $('socket-compatibility').dataset.state = result.status;
+  $('compatibility-title').textContent = {
+    waiting: 'Waiting for selection', match: 'Sockets match',
+    mismatch: 'Socket mismatch', unknown: 'Compatibility unknown',
+  }[result.status];
+  $('compatibility-message').textContent = result.message;
+  $('compatibility-checked-at').textContent =
+    `Socket result checked ${new Date(now).toLocaleTimeString()}. Downloads include this result and its check time.`;
+  const evidence = $('compatibility-evidence');
+  evidence.replaceChildren();
+  for (const [label, part] of [['CPU', cpu], ['Motherboard', motherboard]]) {
+    const provenance = part?.specs?.socketProvenance;
+    if (!part || !provenance) continue;
+    try {
+      const url = new URL(provenance.sourceUrl);
+      if (url.protocol !== 'https:' || url.username || url.password) continue;
+      const link = node('a', 'socket-source', `${label} specification source`);
+      link.href = url.href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      evidence.append(link);
+    } catch {}
+  }
+  return result;
+}
