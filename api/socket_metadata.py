@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urlsplit, urlunsplit
 
-SUPPORTED_SOCKETS = frozenset({"AM5", "LGA1700"})
+SUPPORTED_SOCKETS = frozenset({"AM4", "AM5", "LGA1700"})
 SOCKET_CATEGORIES = frozenset({"cpu", "motherboard"})
 SOCKET_FIELDS = frozenset({"socket", "cpu socket", "processor socket", "socket type"})
 SOCKET_TTL_SECONDS = 3600
