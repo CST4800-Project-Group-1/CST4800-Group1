@@ -166,6 +166,34 @@ function validCategoryPayload(payload, categoryName) {
     && new Set(payload.data.parts.map(part => part.id)).size === payload.data.parts.length;
 }
 
+const socketRequestVersions = new Map();
+async function loadSelectedSocket(categoryName) {
+  if (categoryName !== 'cpu' && categoryName !== 'motherboard') return;
+  const id = build[categoryName];
+  const version = (socketRequestVersions.get(categoryName) || 0) + 1;
+  socketRequestVersions.set(categoryName, version);
+  socketCategoriesReady.delete(categoryName);
+  renderCompatibility();
+  if (!id) return;
+  try {
+    const response = await fetch(`/v1/parts?category=${categoryName}&socketPartId=${encodeURIComponent(id)}`, {cache: 'no-store'});
+    if (!response.ok) throw new Error('Selected socket metadata unavailable');
+    const payload = await response.json();
+    if (!validCategoryPayload(payload, categoryName)) throw new Error('Invalid socket metadata');
+    if (socketRequestVersions.get(categoryName) !== version || build[categoryName] !== id) return;
+    const verified = payload.data.parts.find(part => part.id === id);
+    if (!verified) throw new Error('Selected product missing from socket response');
+    parts = parts.map(part => part.category === categoryName && part.id === id
+      ? {...part, specs: verified.specs || {socket: null, socketProvenance: null}} : part);
+    socketCategoriesReady.add(categoryName);
+  } catch {
+    if (socketRequestVersions.get(categoryName) !== version || build[categoryName] !== id) return;
+    parts = parts.map(part => part.category === categoryName && part.id === id
+      ? {...part, specs: {...part.specs, socket: null, socketProvenance: null}} : part);
+  }
+  renderBuild();
+}
+
 async function load() {
   let cached = null;
   if (catalogLoading) return;
@@ -194,7 +222,19 @@ async function load() {
     try {
       // List every category before spending provider requests on optional specs.
       const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}&metadata=0`, {cache: 'no-store'});
-      if (!response.ok) throw new Error('Category request failed');
+      if (!response.ok) {
+        // The provider explicitly requests a cooldown. Do not hammer every
+        // remaining category with requests known to be rate limited.
+        if (response.status === 503) {
+          const detail = await response.json().catch(() => ({}));
+          if (Number.isFinite(detail.retryAfterSeconds)) {
+            const remainder = catalogCategories.slice(catalogCategories.indexOf(categoryName));
+            failedCategories.push(...remainder);
+            break;
+          }
+        }
+        throw new Error('Category request failed');
+      }
       const payload = await response.json();
       if (!validCategoryPayload(payload, categoryName)) {
         throw new Error('Category response is invalid');
@@ -232,25 +272,12 @@ async function load() {
     }
   }
 
+  // Only fetch details for the selected CPU and motherboard, not the
+  // first three unrelated products in each category.
   for (const categoryName of ['cpu', 'motherboard']) {
-    if (!socketCategoriesReady.has(categoryName)) continue;
-    socketCategoriesReady.delete(categoryName);
-    renderCompatibility();
-    try {
-      const response = await fetch(`/v1/parts?category=${categoryName}`, {cache: 'no-store'});
-      if (!response.ok) throw new Error('Socket metadata unavailable');
-      const payload = await response.json();
-      if (!validCategoryPayload(payload, categoryName)) throw new Error('Invalid socket metadata');
-      const refreshed = new Map(payload.data.parts.map(part => [part.id, part]));
-      parts = parts.map(part => part.category === categoryName
-        ? {...part, specs: refreshed.get(part.id)?.specs || {socket:null,socketProvenance:null}}
-        : part);
-      socketCategoriesReady.add(categoryName);
-    } catch {
-      parts = parts.map(part => part.category === categoryName
-        ? {...part, specs: {...part.specs, socket:null, socketProvenance:null}} : part);
+    if (build[categoryName] && socketCategoriesReady.has(categoryName)) {
+      await loadSelectedSocket(categoryName);
     }
-    renderBuild();
   }
   catalogLoading = false;
   $('refresh-catalog').disabled = false;
@@ -465,6 +492,9 @@ function openPartDetails(part) {
       if (select.disabled) return;
       build[part.category] = part.id;
       save();
+      if (part.category === 'cpu' || part.category === 'motherboard') {
+        void loadSelectedSocket(part.category);
+      }
       selectedOffers.set(part.id, {
         source: chosenOffer.source, sourceUrl: chosenOffer.sourceUrl, priceCents: chosenOffer.priceCents,
         priceUpdatedAt: chosenOffer.priceUpdatedAt, availability: chosenOffer.availability,
