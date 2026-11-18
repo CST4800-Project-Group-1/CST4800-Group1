@@ -37,7 +37,7 @@ function verifiedSocket(part, now) {
       try {
         const u = new URL(value);
         return u.protocol === 'https:' && !u.username && !u.password && !u.port
-          ? u.origin.toLowerCase() + u.pathname.replace(/\\/$/, '') : null;
+          ? u.origin.toLowerCase() + (u.pathname.endsWith('/') ? u.pathname.slice(0, -1) : u.pathname) : null;
       } catch { return null; }
     };
     return reviewed && reviewed.socket === socket && normalizeSocket(evidence.rawValue) === socket
