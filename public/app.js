@@ -24,7 +24,21 @@ let catalogLoading = false;
 let socketCategoriesReady = new Set();
 let socketExpiryTimer = null;
 let loadedCategories = 0;
+const PROVIDER_COOLDOWN_KEY = 'buildlab-provider-cooldown-v1';
 let providerRetryUntil = 0;
+try {
+  const savedUntil = Number(localStorage.getItem(PROVIDER_COOLDOWN_KEY));
+  if (Number.isFinite(savedUntil) && savedUntil > Date.now()) providerRetryUntil = savedUntil;
+} catch {}
+function recordProviderCooldown(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return;
+  providerRetryUntil = Math.max(providerRetryUntil, Date.now() + Math.min(seconds, 3600) * 1000);
+  try { localStorage.setItem(PROVIDER_COOLDOWN_KEY, String(providerRetryUntil)); } catch {}
+}
+function cooldownMessage() {
+  const seconds = Math.ceil(Math.max(0, providerRetryUntil - Date.now()) / 1000);
+  return `Retailer service is rate limited. Retry in about ${seconds} seconds. Saved catalog prices may be outdated; socket checks remain unknown until verified.`;
+}
 
 const $ = id => document.getElementById(id);
 const money = cents => new Intl.NumberFormat('en-US', {
@@ -182,7 +196,7 @@ async function loadSelectedSocket(categoryName) {
       if (response.status === 503) {
         const detail = await response.json().catch(() => ({}));
         if (Number.isFinite(detail.retryAfterSeconds) && detail.retryAfterSeconds > 0) {
-          providerRetryUntil = Math.max(providerRetryUntil, Date.now() + detail.retryAfterSeconds * 1000);
+          recordProviderCooldown(detail.retryAfterSeconds);
         }
       }
       throw new Error('Selected socket metadata unavailable');
@@ -206,11 +220,6 @@ async function loadSelectedSocket(categoryName) {
 async function load() {
   let cached = null;
   if (catalogLoading) return;
-  if (Date.now() < providerRetryUntil) {
-    $('status').textContent = 'Retailer service is temporarily rate limited. Try refreshing after the cooldown.';
-    $('retry').hidden = false;
-    return;
-  }
   catalogLoading = true;
   $('refresh-catalog').disabled = true;
   socketCategoriesReady.clear();
@@ -228,6 +237,14 @@ async function load() {
     renderCategories();
     renderBuild();
     renderParts();
+  }
+  if (Date.now() < providerRetryUntil) {
+    catalogLoading = false;
+    $('refresh-catalog').disabled = false;
+    renderParts();
+    $('status').textContent = cooldownMessage();
+    $('retry').hidden = false;
+    return;
   }
   $('retry').hidden = true;
 
@@ -302,9 +319,10 @@ async function load() {
   renderParts();
   if (failedCategories.length) {
     const failedLabels = failedCategories.map(name => labels[name]).join(', ');
-    $('status').textContent = parts.length
-      ? `Some categories did not load (${failedLabels}). Try again to refresh them.`
-      : 'The catalog could not load. Please try again.';
+    $('status').textContent = Date.now() < providerRetryUntil ? cooldownMessage()
+      : parts.length
+        ? `Some categories did not load (${failedLabels}). Try again to refresh them.`
+        : 'The catalog could not load. Please try again.';
     $('retry').hidden = false;
     if (!parts.length) $('result-count').textContent = 'Catalog unavailable';
   }
@@ -351,6 +369,7 @@ function storedRetailerPrices() {
   } catch { return []; }
 }
 function loadRetailerPrice(source, model, name) {
+  if (Date.now() < providerRetryUntil) return Promise.resolve([]);
   const key = JSON.stringify([source, model, name]);
   const cached = retailerPriceCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.promise;
