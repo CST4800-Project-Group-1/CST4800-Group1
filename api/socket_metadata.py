@@ -121,7 +121,7 @@ def _labeled_spec_socket(html, part):
     # not as a marketing bullet, title, chipset name, or descriptive sentence.
     matches = []
     for match in re.finditer(
-        r"\\b(CPU Socket|Processor Socket|Socket Type|Socket)\\s*:?\\s*(AM4|AM5|LGA1700)\\b",
+        r"\\b(CPU Socket|Processor Socket|Socket Type)\\s*:?\\s*(AM4|AM5|LGA1700)\\b",
         text, flags=re.I):
         matches.append((normalize_socket(match.group(2)), match.group(1), match.group(2)))
     values = {item[0] for item in matches}
