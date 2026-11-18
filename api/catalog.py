@@ -3,6 +3,7 @@
 Add listing URLs to CATEGORY_URLS and an adapter entry to RETAILERS for new stores.
 Retailer-specific HTML parsing stays in its adapter; routing and fetching are shared.
 """
+import copy
 import json
 import os
 import re
@@ -532,7 +533,32 @@ def _load_category(category, url, api_key, include_sockets=True):
     return _enrich_sockets(parts, api_key) if include_sockets else parts
 
 
-def _category_catalog(category, include_sockets=True):
+def _category_catalog(category, include_sockets=True, selected_id=None):
+    # Enrich only the requested product; listing loads must not spend
+    # detail requests on products that the visitor has not selected.
+    if selected_id is not None:
+        if not isinstance(selected_id, str) or not selected_id or len(selected_id) > 200:
+            raise RuntimeError("A valid selected product ID is required.")
+        cache_key = (category, "selected-socket", selected_id)
+        now = time.time()
+        cached = _CATEGORY_CACHE.get(cache_key)
+        if cached and now < cached["expires"]:
+            return public_catalog(cached["catalog"], now)
+        listing = _category_catalog(category, include_sockets=False)
+        catalog = copy.deepcopy(listing)
+        selected = next((part for part in catalog["parts"] if part["id"] == selected_id), None)
+        if selected is None:
+            raise RuntimeError("Selected product was not found in the live catalog.")
+        api_key = os.environ.get("ZENROWS_API_KEY", "").strip()
+        if not api_key:
+            raise RuntimeError("ZENROWS_API_KEY is not configured.")
+        _enrich_sockets([selected], api_key)
+        # Unknown is never a compatibility success. Cache short-lived failures
+        # so repeated UI actions do not trigger another retailer lookup instantly.
+        ttl = 60 if not fresh_socket(selected, time.time()) else CACHE_SECONDS
+        _CATEGORY_CACHE[cache_key] = {"expires": time.time() + ttl, "catalog": catalog}
+        return public_catalog(catalog, time.time())
+
     cache_key = category if include_sockets else (category, "listing")
     now = time.time()
     cached = _CATEGORY_CACHE.get(cache_key)
@@ -922,7 +948,8 @@ class handler(BaseHTTPRequestHandler):
                     status = 404
                     cache_control = "no-store"
                 else:
-                    catalog = _category_catalog(category, include_sockets=query.get("metadata", ["1"])[0] != "0")
+                    catalog = _category_catalog(category, include_sockets=query.get("metadata", ["1"])[0] != "0",
+                        selected_id=query.get("socketPartId", [None])[0])
                     body = {"status": "success", "data": catalog}
                     status = 200
                     cache_control = "no-store"
