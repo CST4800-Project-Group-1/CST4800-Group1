@@ -19,7 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-from api.socket_metadata import SOCKET_CATEGORIES, canonical_url, extract_socket, public_catalog
+from api.socket_metadata import SOCKET_CATEGORIES, canonical_url, extract_socket, fresh_socket, public_catalog
 
 ZENROWS_ENDPOINT = "https://api.zenrows.com/v1/"
 CACHE_SECONDS = 3600
