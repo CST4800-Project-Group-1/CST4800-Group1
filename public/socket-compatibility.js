@@ -27,6 +27,16 @@ function verifiedSocket(part, now) {
         retailer: 'https://www.bhphotovideo.com/c/product/2007607-REG/amd_100_100001905box_ryzen_5_5500f_6_core.html',
         manufacturer: 'https://www.amd.com/en/products/processors/desktops/ryzen/5000-series/amd-ryzen-5-5500f.html',
       },
+      'cpu|100-100000910WOF': {
+        socket: 'AM5',
+        retailer: 'https://www.bhphotovideo.com/c/product/1753575-REG/amd_100_100000910wof_ryzen_7_7800x3d_4_2.html',
+        manufacturer: 'https://www.amd.com/en/products/processors/desktops/ryzen/7000-series/amd-ryzen-7-7800X3d.html',
+      },
+      'motherboard|X870E AERO X3D WOOD': {
+        socket: 'AM5',
+        retailer: 'https://www.bhphotovideo.com/c/product/1950535-REG/gigabyte_x870e_aero_x3d_wood.html',
+        manufacturer: 'https://www.gigabyte.com/us/Motherboard/X870E-AERO-X3D-WOOD/sp',
+      },
       'motherboard|X870 EAGLE WIFI7': {
         socket: 'AM5',
         retailer: 'https://www.bhphotovideo.com/c/product/1852679-REG/gigabyte_x870_eagle_wifi7_motherboard.html',
