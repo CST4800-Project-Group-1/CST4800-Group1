@@ -189,32 +189,63 @@ async function loadSelectedSocket(categoryName) {
   socketRequestVersions.set(categoryName, version);
   socketCategoriesReady.delete(categoryName);
   renderCompatibility();
-  if (!id || Date.now() < providerRetryUntil) return;
+  const selected = parts.find(part => part.id === id && part.category === categoryName);
+  if (!selected) return;
+  const current = () => socketRequestVersions.get(categoryName) === version && build[categoryName] === id;
+  const apply = specs => {
+    if (!current()) return false;
+    parts = parts.map(part => part.category === categoryName && part.id === id
+      ? {...part, specs: {...part.specs, ...specs}} : part);
+    socketCategoriesReady.add(categoryName);
+    renderBuild();
+    return true;
+  };
+
+  // Manufacturer-reviewed model facts do not need fresh retailer listings.
+  // Always try this even if ZenRows is in a rate-limit cooldown.
+  try {
+    const params = new URLSearchParams({
+      socketReference: '1', category: categoryName, socketPartId: id,
+      socketModel: selected.model || '', sourceUrl: selected.sourceUrl || '',
+    });
+    const response = await fetch(`/v1/parts?${params}`, {cache: 'no-store'});
+    if (response.ok) {
+      const body = await response.json();
+      if (!current()) return;
+      const data = body?.data;
+      if (body.status === 'success' && data?.id === id && data?.category === categoryName
+          && data?.specs?.socket && data?.specs?.socketProvenance?.method === 'manufacturer_spec_reference') {
+        apply(data.specs);
+        return;
+      }
+    }
+  } catch {
+    // An unavailable manufacturer reference cannot establish compatibility.
+  }
+  if (!current() || Date.now() < providerRetryUntil) return;
+
+  // Unknown models use the existing independently verified retailer detail path.
   try {
     const response = await fetch(`/v1/parts?category=${categoryName}&socketPartId=${encodeURIComponent(id)}`, {cache: 'no-store'});
     if (!response.ok) {
       if (response.status === 503) {
         const detail = await response.json().catch(() => ({}));
-        if (Number.isFinite(detail.retryAfterSeconds) && detail.retryAfterSeconds > 0) {
-          recordProviderCooldown(detail.retryAfterSeconds);
-        }
+        recordProviderCooldown(detail.retryAfterSeconds);
       }
       throw new Error('Selected socket metadata unavailable');
     }
     const payload = await response.json();
     if (!validCategoryPayload(payload, categoryName)) throw new Error('Invalid socket metadata');
-    if (socketRequestVersions.get(categoryName) !== version || build[categoryName] !== id) return;
+    if (!current()) return;
     const verified = payload.data.parts.find(part => part.id === id);
     if (!verified) throw new Error('Selected product missing from socket response');
-    parts = parts.map(part => part.category === categoryName && part.id === id
-      ? {...part, specs: verified.specs || {socket: null, socketProvenance: null}} : part);
-    socketCategoriesReady.add(categoryName);
+    apply(verified.specs || {socket: null, socketProvenance: null});
   } catch {
-    if (socketRequestVersions.get(categoryName) !== version || build[categoryName] !== id) return;
-    parts = parts.map(part => part.category === categoryName && part.id === id
-      ? {...part, specs: {...part.specs, socket: null, socketProvenance: null}} : part);
+    if (!current()) return;
+    apply({socket: null, socketProvenance: null});
+    socketCategoriesReady.delete(categoryName);
+    renderCompatibility();
   }
-  renderBuild();
 }
 
 async function load() {
@@ -237,6 +268,10 @@ async function load() {
     renderCategories();
     renderBuild();
     renderParts();
+  }
+  // Allow exact manufacturer socket checks even while ZenRows is rate limited.
+  for (const categoryName of ['cpu', 'motherboard']) {
+    if (build[categoryName]) await loadSelectedSocket(categoryName);
   }
   if (Date.now() < providerRetryUntil) {
     catalogLoading = false;
@@ -309,9 +344,7 @@ async function load() {
   // Only fetch details for the selected CPU and motherboard, not the
   // first three unrelated products in each category.
   for (const categoryName of ['cpu', 'motherboard']) {
-    if (Date.now() >= providerRetryUntil && build[categoryName] && socketCategoriesReady.has(categoryName)) {
-      await loadSelectedSocket(categoryName);
-    }
+    if (build[categoryName]) await loadSelectedSocket(categoryName);
   }
   catalogLoading = false;
   $('refresh-catalog').disabled = false;
