@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urlsplit, urlunsplit
 
-SUPPORTED_SOCKETS = frozenset({"AM5", "LGA1700"})
+SUPPORTED_SOCKETS = frozenset({"AM4", "AM5", "LGA1700"})
 SOCKET_CATEGORIES = frozenset({"cpu", "motherboard"})
 SOCKET_FIELDS = frozenset({"socket", "cpu socket", "processor socket", "socket type"})
 SOCKET_TTL_SECONDS = 3600
@@ -82,6 +82,52 @@ def _properties(data):
                 yield item
 
 
+class _VisibleProductText(HTMLParser):
+    """Collect visible specification labels without evaluating embedded scripts."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.hidden = 0
+        self.tokens = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "noscript"):
+            self.hidden += 1
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "noscript") and self.hidden:
+            self.hidden -= 1
+
+    def handle_data(self, data):
+        if not self.hidden:
+            value = re.sub(r"\s+", " ", data).strip()
+            if value:
+                self.tokens.append(value)
+
+
+def _labeled_spec_socket(html, part):
+    """B&H specification-table fallback; no names or feature-bullet inference."""
+    parser = _VisibleProductText()
+    parser.feed(html or "")
+    text = " ".join(parser.tokens)
+    model = part.get("model")
+    if not isinstance(model, str) or not model.strip():
+        return None
+    compact = lambda value: re.sub(r"\s+", " ", value).strip().casefold()
+    # Accept only a page identifying the exact manufacturer part number.
+    id_pattern = r"\bmfr\s*#\s*" + re.escape(compact(model)) + r"(?=\s|$)"
+    if not re.search(id_pattern, compact(text)):
+        return None
+    # The socket must appear as an explicitly labeled specification field,
+    # not as a marketing bullet, title, chipset name, or descriptive sentence.
+    matches = []
+    for match in re.finditer(
+        r"\b(CPU Socket|Processor Socket|Socket Type)\s*:?\s*(AM4|AM5|LGA1700)\b",
+        text, flags=re.I):
+        matches.append((normalize_socket(match.group(2)), match.group(1), match.group(2)))
+    values = {item[0] for item in matches}
+    return matches[0] if len(values) == 1 and None not in values and matches else None
+
+
 def extract_socket(html, part, verified_at):
     """Require URL and exact MPN/model identity plus a labeled specification."""
     unknown = {"socket": None, "socketProvenance": None}
@@ -109,6 +155,10 @@ def extract_socket(html, part, verified_at):
                 if isinstance(field, str) and field.strip().casefold() in SOCKET_FIELDS:
                     raw = prop.get("value")
                     evidence.append((normalize_socket(raw), field.strip(), raw))
+    if not evidence:
+        labeled = _labeled_spec_socket(html, part)
+        if labeled:
+            evidence.append(labeled)
     values = {entry[0] for entry in evidence}
     if len(values) != 1 or None in values:
         return unknown
@@ -121,6 +171,46 @@ def extract_socket(html, part, verified_at):
     }}
 
 
+# Manually reviewed, exact manufacturer model + B&H product-page pairs.
+# These are stable hardware specifications, not live retailer availability.
+# Add models only after checking the manufacturer's published specification.
+MANUFACTURER_SOCKET_REFERENCES = {
+    ("cpu", "100-100001905BOX"): {
+        "socket": "AM4",
+        "retailerUrl": "https://www.bhphotovideo.com/c/product/2007607-REG/amd_100_100001905box_ryzen_5_5500f_6_core.html",
+        "sourceUrl": "https://www.amd.com/en/products/processors/desktops/ryzen/5000-series/amd-ryzen-5-5500f.html",
+        "sourceField": "CPU Socket",
+        "reviewedOn": "2026-11-18",
+    },
+    ("motherboard", "X870 EAGLE WIFI7"): {
+        "socket": "AM5",
+        "retailerUrl": "https://www.bhphotovideo.com/c/product/1852679-REG/gigabyte_x870_eagle_wifi7_motherboard.html",
+        "sourceUrl": "https://www.gigabyte.com/Motherboard/X870-EAGLE-WIFI7-rev-1x/sp",
+        "sourceField": "CPU",
+        "reviewedOn": "2026-11-18",
+    },
+}
+
+
+def manufacturer_reference(category, model, retailer_url):
+    """Return only reviewed exact-model facts, with the original manufacturer source."""
+    if not isinstance(model, str) or not isinstance(category, str):
+        return {"socket": None, "socketProvenance": None}
+    item = MANUFACTURER_SOCKET_REFERENCES.get((category, model.strip().upper()))
+    if not item or canonical_url(retailer_url) != canonical_url(item["retailerUrl"]):
+        return {"socket": None, "socketProvenance": None}
+    return {
+        "socket": item["socket"],
+        "socketProvenance": {
+            "method": "manufacturer_spec_reference",
+            "sourceUrl": item["sourceUrl"],
+            "sourceField": item["sourceField"],
+            "rawValue": item["socket"],
+            "reviewedOn": item["reviewedOn"],
+        },
+    }
+
+
 def fresh_socket(part, now):
     specs = part.get("specs")
     if not isinstance(specs, dict):
@@ -128,6 +218,9 @@ def fresh_socket(part, now):
     socket, evidence = specs.get("socket"), specs.get("socketProvenance")
     if not isinstance(socket, str) or socket not in SUPPORTED_SOCKETS or not isinstance(evidence, dict):
         return False
+    if evidence.get("method") == "manufacturer_spec_reference":
+        reviewed = manufacturer_reference(part.get("category"), part.get("model"), part.get("sourceUrl"))
+        return reviewed["socket"] == socket and reviewed["socketProvenance"] == evidence
     if (evidence.get("method") != "explicit_product_spec"
             or not isinstance(evidence.get("sourceField"), str)
             or evidence["sourceField"].strip().casefold() not in SOCKET_FIELDS

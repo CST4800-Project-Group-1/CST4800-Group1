@@ -33,3 +33,9 @@ test('replacing either component changes the result without cached decisions',()
   assert.equal(check(part('cpu','LGA1700'),part('motherboard','LGA1700')).status,'match');
   assert.equal(check(null,part('motherboard','LGA1700')).status,'waiting');
 });
+
+test('verified AM4 is supported and detects AM4 versus AM5 mismatch',()=>{
+  assert.equal(check(part('cpu','AM4'),part('motherboard','AM4')).status,'match');
+  assert.equal(check(part('cpu','AM4'),part('motherboard','AM5')).status,'mismatch');
+  assert.equal(check(part('cpu','AM5'),part('motherboard','AM4')).status,'mismatch');
+});

@@ -50,7 +50,7 @@ class SocketApiTests(unittest.TestCase):
 
     def test_verified_values_and_provenance_for_both_categories(self):
         for category in ("cpu", "motherboard"):
-            for value in (" am5 ", " lga1700 "):
+            for value in (" am4 ", " am5 ", " lga1700 "):
                 with self.subTest(category=category, value=value):
                     record = part(category)
                     record["specs"].update(extract_socket(page(value), record, NOW))
@@ -64,7 +64,7 @@ class SocketApiTests(unittest.TestCase):
                     self.assertFalse(fresh_socket(record, NOW + 3600))
 
     def test_missing_unsupported_and_malformed_socket_stay_unknown(self):
-        for value in (None, "", "AM4", "AM999", "Socket AM5", {}, ["AM5"], 42):
+        for value in (None, "", "AM999", "Socket AM5", {}, ["AM5"], 42):
             self.assertEqual(extract_socket(page(value), part(), NOW), {"socket": None, "socketProvenance": None})
 
     def test_names_features_and_unrelated_fields_are_not_evidence(self):
@@ -100,6 +100,37 @@ class SocketApiTests(unittest.TestCase):
             <div class="sku_value">BH # BOARD • MFR # X870 EAGLE WIFI7</div><span class="price_value">$199.99</span></div>'''
         self.assertEqual(catalog._parse_category(html, "motherboard")[0]["model"], "X870 EAGLE WIFI7")
 
+    def test_exact_bh_specification_table_fallback(self):
+        for category, socket in (("cpu", "AM4"), ("motherboard", "AM5")):
+            record = part(category)
+            html = ('<h1>Exact product page</h1><div>BH #123 • MFR #EXACT-123</div>'
+                    '<h2>Specifications</h2><table>'
+                    '<tr><th>CPU Socket</th><td>' + socket + '</td></tr></table>')
+            result = extract_socket(html, record, NOW)
+            self.assertEqual(result["socket"], socket)
+            self.assertEqual(result["socketProvenance"]["sourceField"], "CPU Socket")
+            self.assertTrue(fresh_socket({**record, "specs": result}, NOW))
+            # Page-title, unlabelled marketing bullet and wrong MFR cannot
+            # establish verification, even when a supported socket appears.
+            self.assertIsNone(extract_socket(html.replace("MFR #EXACT-123", "MFR #OTHER"),
+                                               record, NOW)["socket"])
+            self.assertIsNone(extract_socket(
+                '<div>MFR #EXACT-123</div><p>Socket ' + socket + '</p>',
+                record, NOW)["socket"])
+
+    def test_selected_socket_looks_up_only_the_requested_record(self):
+        records = [part(), {**part(), "id": "second", "model": "SECOND"}]
+        for record in records:
+            record["specs"] = {"feature1": "listing"}
+        with patch.dict("os.environ", {"ZENROWS_API_KEY": "test"}), \
+             patch("api.catalog._load_category", return_value=records), \
+             patch("api.catalog._enrich_sockets") as enrich:
+            headers, body = response("/api/catalog?category=cpu&socketPartId=second")
+        self.assertEqual(headers["status"], 200)
+        self.assertEqual(len(body["data"]["parts"]), 2)
+        enrich.assert_called_once()
+        self.assertEqual([item["id"] for item in enrich.call_args.args[0]], ["second"])
+
     def test_non_socket_category_does_not_fetch_specs(self):
         with patch("api.catalog._fetch_page") as fetch:
             catalog._enrich_sockets([part("ram")], "test")
@@ -132,6 +163,24 @@ class SocketApiTests(unittest.TestCase):
         self.assertNotIn("options", fetch.call_args.kwargs)
         self.assertLessEqual(fetch.call_args.kwargs["timeout"], 8)
 
+    def test_selected_rate_limit_propagates_to_client(self):
+        record = part()
+        with patch("api.catalog._fetch_page", side_effect=catalog.ProviderRateLimited(55)):
+            with self.assertRaises(catalog.ProviderRateLimited) as caught:
+                catalog._enrich_sockets([record], "test", allow_render=True)
+        self.assertEqual(caught.exception.retry_after, 55)
+        self.assertIsNone(record["specs"]["socket"])
+
+    def test_selected_detail_renders_only_after_plain_fetch_does_not_verify(self):
+        record = part()
+        with patch("api.catalog._fetch_page", side_effect=[None, page("AM4")]) as fetch:
+            catalog._enrich_sockets([record], "test", allow_render=True)
+        self.assertEqual(record["specs"]["socket"], "AM4")
+        self.assertEqual(fetch.call_count, 2)
+        self.assertFalse(fetch.call_args_list[0].kwargs.get("js_render", False))
+        self.assertTrue(fetch.call_args_list[1].kwargs.get("js_render", False))
+        self.assertEqual(fetch.call_args_list[1].kwargs["options"]["wait_for"], "h1")
+
     def test_exceeded_budget_cannot_establish_compatibility(self):
         record = part()
         with patch("api.catalog.time.monotonic", side_effect=[0, 0, 19, 19]), \
@@ -155,7 +204,7 @@ class SocketApiTests(unittest.TestCase):
                 self.assertTrue(fresh_socket(record, NOW))
 
     def test_api_missing_unsupported_or_failed_detail_is_unknown(self):
-        for detail in (page("AM4"), page(additionalProperty=[]), RuntimeError("failure")):
+        for detail in (page("AM999"), page(additionalProperty=[]), RuntimeError("failure")):
             catalog._CATEGORY_CACHE.clear()
             with patch.dict("os.environ", {"ZENROWS_API_KEY": "test"}), \
                  patch("api.catalog._parse_category", return_value=[part()]), \
