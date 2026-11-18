@@ -170,6 +170,7 @@ async function load() {
   let cached = null;
   if (catalogLoading) return;
   catalogLoading = true;
+  $('refresh-catalog').disabled = true;
   socketCategoriesReady.clear();
   renderCompatibility();
   loadedCategories = 0;
@@ -192,7 +193,7 @@ async function load() {
   for (const categoryName of catalogCategories) {
     try {
       // List every category before spending provider requests on optional specs.
-      const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}&metadata=0`);
+      const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}&metadata=0`, {cache: 'no-store'});
       if (!response.ok) throw new Error('Category request failed');
       const payload = await response.json();
       if (!validCategoryPayload(payload, categoryName)) {
@@ -236,7 +237,7 @@ async function load() {
     socketCategoriesReady.delete(categoryName);
     renderCompatibility();
     try {
-      const response = await fetch(`/v1/parts?category=${categoryName}`);
+      const response = await fetch(`/v1/parts?category=${categoryName}`, {cache: 'no-store'});
       if (!response.ok) throw new Error('Socket metadata unavailable');
       const payload = await response.json();
       if (!validCategoryPayload(payload, categoryName)) throw new Error('Invalid socket metadata');
@@ -252,6 +253,8 @@ async function load() {
     renderBuild();
   }
   catalogLoading = false;
+  $('refresh-catalog').disabled = false;
+  renderCompatibility();
   renderParts();
   if (failedCategories.length) {
     const failedLabels = failedCategories.map(name => labels[name]).join(', ');
@@ -266,6 +269,7 @@ async function load() {
 $('search').oninput = renderParts;
 $('sort').onchange = renderParts;
 $('retry').onclick = load;
+$('refresh-catalog').onclick = load;
 $('clear').onclick = () => {
   build = {};
   save();
@@ -274,11 +278,16 @@ $('clear').onclick = () => {
 };
 $('export').onclick = () => {
   const chosen = selectedParts();
+  const snapshot = socketSnapshot();
+  renderCompatibility(snapshot);
   const data = {
     isSampleData,
     compatibilityChecked: false,
-    socketCompatibility: renderCompatibility(),
-    parts: chosen,
+    socketCompatibility: snapshot.result,
+    socketEvaluation: snapshot.evaluation,
+    parts: chosen.map(part => ({...part,
+      catalogSourceUrl: parts.find(item => item.id === part.id && item.category === part.category)?.sourceUrl || null,
+    })),
     totalCents: chosen.reduce((sum, part) => sum + part.priceCents, 0),
   };
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
@@ -596,21 +605,54 @@ $('part-dialog').onclick = event => {
 renderBuild();
 load();
 
-function renderCompatibility(){
-  const cpu=parts.find(p=>p.category==='cpu'&&p.id===build.cpu);
-  const motherboard=parts.find(p=>p.category==='motherboard'&&p.id===build.motherboard);
-  const result=evaluateSocketCompatibility(cpu,motherboard,{
-    refreshState:socketCategoriesReady.has('cpu') && socketCategoriesReady.has('motherboard')?'ready':catalogLoading?'loading':'failed'
-  });
-  clearTimeout(socketExpiryTimer);
-  const now=Date.now();
-  const nextExpiry=(result.status==='match'||result.status==='mismatch')
-    ?Math.min(...[cpu,motherboard].map(part=>Date.parse(part?.specs?.socketProvenance?.expiresAt)).filter(expiry=>expiry>now&&expiry-now<=3600000))
-    :Infinity;
-  socketExpiryTimer=Number.isFinite(nextExpiry)?setTimeout(renderCompatibility,nextExpiry-now+1):null;
-  $('socket-compatibility').dataset.state=result.status;
-  $('compatibility-title').textContent={waiting:'Waiting for selection',match:'Sockets match',mismatch:'Socket mismatch',unknown:'Compatibility unknown'}[result.status];
-  $('compatibility-message').textContent=result.message;
-  return result;
+function socketSnapshot() {
+  const cpu = parts.find(part => part.category === 'cpu' && part.id === build.cpu);
+  const motherboard = parts.find(part => part.category === 'motherboard' && part.id === build.motherboard);
+  const now = Date.now();
+  const refreshState = socketCategoriesReady.has('cpu') && socketCategoriesReady.has('motherboard')
+    ? 'ready' : catalogLoading ? 'loading' : 'failed';
+  return {
+    cpu, motherboard, now,
+    result: evaluateSocketCompatibility(cpu, motherboard, {now, refreshState}),
+    evaluation: {
+      evaluatedAt: new Date(now).toISOString(), refreshState,
+      cpuPartId: cpu?.id || null, motherboardPartId: motherboard?.id || null,
+      cpuSourceUrl: cpu?.sourceUrl || null, motherboardSourceUrl: motherboard?.sourceUrl || null,
+    },
+  };
 }
 
+function renderCompatibility(snapshot = socketSnapshot()) {
+  const {cpu, motherboard, now, result} = snapshot;
+  clearTimeout(socketExpiryTimer);
+  const nextExpiry = (result.status === 'match' || result.status === 'mismatch')
+    ? Math.min(...[cpu, motherboard].map(part => Date.parse(part?.specs?.socketProvenance?.expiresAt))
+      .filter(expiry => expiry > now && expiry - now <= 3600000))
+    : Infinity;
+  socketExpiryTimer = Number.isFinite(nextExpiry)
+    ? setTimeout(renderCompatibility, nextExpiry - now + 1) : null;
+  $('socket-compatibility').dataset.state = result.status;
+  $('compatibility-title').textContent = {
+    waiting: 'Waiting for selection', match: 'Sockets match',
+    mismatch: 'Socket mismatch', unknown: 'Compatibility unknown',
+  }[result.status];
+  $('compatibility-message').textContent = result.message;
+  $('compatibility-checked-at').textContent =
+    `Socket result checked ${new Date(now).toLocaleTimeString()}. Downloads include this result and its check time.`;
+  const evidence = $('compatibility-evidence');
+  evidence.replaceChildren();
+  for (const [label, part] of [['CPU', cpu], ['Motherboard', motherboard]]) {
+    const provenance = part?.specs?.socketProvenance;
+    if (!part || !provenance) continue;
+    try {
+      const url = new URL(provenance.sourceUrl);
+      if (url.protocol !== 'https:' || url.username || url.password) continue;
+      const link = node('a', 'socket-source', `${label} specification source`);
+      link.href = url.href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      evidence.append(link);
+    } catch {}
+  }
+  return result;
+}
