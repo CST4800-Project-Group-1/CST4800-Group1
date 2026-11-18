@@ -12,7 +12,7 @@ Tickets:
 
 ## Fields delivered by the live API
 
-For `cpu` and `motherboard`, `specs.socket` is `AM5`, `LGA1700`, or null.
+For `cpu` and `motherboard`, `specs.socket` is `AM4`, `AM5`, `LGA1700`, or null.
 Normalize by trimming and uppercasing only; no aliases or socket inference from
 names, chipset names, URLs or feature blurbs. Other sockets remain unknown.
 
@@ -55,16 +55,20 @@ age and the earliest socket expiry, with a two-second margin. It never permits
 stale-while-revalidate or stale-if-error. Errors are not cached.
 A failed listing refresh returns HTTP 503; it never returns the old cached success.
 
-The importer attempts at most three sequential detail fetches within an
-18-second category budget, each fetch using at most eight seconds of remaining
-budget. Optional specs never retry rendered pages. Provider calls are serialized
+The legacy broad metadata endpoint attempts at most three sequential detail fetches within an
+18-second category budget. The selected-product endpoint (`GET /v1/parts?category=cpu&socketPartId=<catalog-id>`
+ or motherboard category) instead enriches only the requested catalog item, preserving the listing.
+The user interface uses selected-product enrichment and does not request broad
+metadata for unselected products. Each detail fetch uses at most eight seconds
+of remaining budget. Optional specs never retry rendered pages. Provider calls are serialized
 within each worker; HTTP 429 starts a Retry-After cooldown and never triggers
 a rendered retry. A local worker lock is not an account-wide distributed limit.
 Queued/timed-out/unverified products remain unknown. There is no guarantee every
-record will have retrievable evidence on every request. The website first loads
-all seven categories with `metadata=0` (listings only), then requests CPU and
-motherboard metadata. A metadata failure leaves those prices visible and sockets
-unknown. A warm worker reuses the listing snapshot during enrichment; Vercel's
+record will have retrievable evidence on every request. The website first loads all seven categories with `metadata=0` (listings only),
+then requests verified metadata only for the selected CPU and motherboard, also
+when either selection changes. A metadata failure leaves prices visible and sockets unknown.
+Frontend category loading respects provider `retryAfterSeconds` and does not
+continue to request remaining categories during a known cooldown. A warm worker reuses the listing snapshot during enrichment; Vercel's
 shared response cache reduces repeated work across worker instances.
 Credentials remain
 server-side; use the existing environment/local configuration.
