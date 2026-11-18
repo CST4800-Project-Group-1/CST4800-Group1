@@ -4,11 +4,6 @@ Add listing URLs to CATEGORY_URLS and an adapter entry to RETAILERS for new stor
 Retailer-specific HTML parsing stays in its adapter; routing and fetching are shared.
 """
 import copy
-"""Retailer catalog and exact-model offer endpoints backed by ZenRows.
-
-Add listing URLs to CATEGORY_URLS and an adapter entry to RETAILERS for new stores.
-Retailer-specific HTML parsing stays in its adapter; routing and fetching are shared.
-"""
 import json
 import os
 import re
@@ -30,8 +25,6 @@ from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlsplit, urlu
 from urllib.request import Request, urlopen
 
 from api.socket_metadata import SOCKET_CATEGORIES, canonical_url, extract_socket, fresh_socket, manufacturer_reference, public_catalog
-
-from api.socket_metadata import SOCKET_CATEGORIES, canonical_url, extract_socket, public_catalog
 
 ZENROWS_ENDPOINT = "https://api.zenrows.com/v1/"
 CACHE_SECONDS = 3600
@@ -708,6 +701,7 @@ def _fetch_page_uncached(url, api_key, js_render=False, options=None, timeout=No
         raise RuntimeError("ZenRows request failed or timed out.") from None
 
 def _enrich_sockets(parts, api_key, allow_render=False):
+def _enrich_sockets(parts, api_key, allow_render=False):
     """Bound socket refresh work; unavailable evidence never removes price records."""
     deadline = time.monotonic() + 18
 
@@ -793,6 +787,22 @@ def _enrich_sockets(parts, api_key):
             # If the budget was exceeded, do not establish fresh compatibility.
             if html and time.monotonic() <= deadline:
                 part["specs"].update(extract_socket(html, part, time.time()))
+            # The provider often blocks unrendered B&H product detail pages.
+            # Retry rendering only for the explicitly selected product, never
+            # for the whole catalog. Keep the existing provider cooldown.
+            if allow_render and not part["specs"].get("socket"):
+                remaining = deadline - time.monotonic()
+                if remaining > 2:
+                    rendered = _fetch_page(url, api_key, js_render=True,
+                        options={"wait_for": "h1"}, timeout=min(12, remaining))
+                    if rendered and time.monotonic() <= deadline:
+                        part["specs"].update(extract_socket(rendered, part, time.time()))
+        except ProviderRateLimited:
+            # A selected-product lookup must tell the browser to respect the
+            # provider's cooldown, rather than silently returning empty specs.
+            if allow_render:
+                raise
+            return
         except (RuntimeError, ValueError, TypeError):
             return
 
@@ -836,6 +846,34 @@ def _load_category(category, url, api_key, include_sockets=True):
     if not parts:
         raise RuntimeError("No catalog products were parsed for category: " + category)
     return _enrich_sockets(parts, api_key) if include_sockets else parts
+
+
+def _category_catalog(category, include_sockets=True, selected_id=None):
+    # Enrich only the requested product; listing loads must not spend
+    # detail requests on products that the visitor has not selected.
+    if selected_id is not None:
+        if not isinstance(selected_id, str) or not selected_id or len(selected_id) > 200:
+            raise RuntimeError("A valid selected product ID is required.")
+        cache_key = (category, "selected-socket", selected_id)
+        now = time.time()
+        cached = _CATEGORY_CACHE.get(cache_key)
+        if cached and now < cached["expires"]:
+            return public_catalog(cached["catalog"], now)
+        listing = _category_catalog(category, include_sockets=False)
+        catalog = copy.deepcopy(listing)
+        selected = next((part for part in catalog["parts"] if part["id"] == selected_id), None)
+        if selected is None:
+            raise RuntimeError("Selected product was not found in the live catalog.")
+        api_key = os.environ.get("ZENROWS_API_KEY", "").strip()
+        if not api_key:
+            raise RuntimeError("ZENROWS_API_KEY is not configured.")
+        _enrich_sockets([selected], api_key, allow_render=True)
+        # Unknown is never a compatibility success. Cache short-lived failures
+        # so repeated UI actions do not trigger another retailer lookup instantly.
+        ttl = 60 if not fresh_socket(selected, time.time()) else CACHE_SECONDS
+        _CATEGORY_CACHE[cache_key] = {"expires": time.time() + ttl, "catalog": catalog}
+        return public_catalog(catalog, time.time())
+
     return _enrich_sockets(parts, api_key) if include_sockets else parts
 
 
@@ -1590,25 +1628,11 @@ class handler(BaseHTTPRequestHandler):
             elif category is not None:
                 if category not in CATEGORY_URLS.get(CATALOG_SOURCE, {}):
                     body = {"error": "Unsupported category.", "supported_categories": list(CATEGORY_URLS.get(CATALOG_SOURCE, {}))}
-        retry_after = None
-        try:
-            query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
-            category = query.get("category", [None])[0]
-            if query.get("links", [""])[0] == "1":
-                urls = _confirmed_product_urls(query.get("model", [""])[0], query.get("sourceUrl", [""])[0])
-                status, body = 200, {"offers": [{"source": store, "sourceUrl": url,
-                    "availability": "Matched manufacturer model; confirm current price at retailer"}
-                    for store, url in urls.items()]}
-                cache_control = "no-store"
-            elif "model" in query:
-                status, body = _get_offers(query["model"][0], query.get("name", [""])[0], query.get("store", [None])[0])
-                cache_control = "public, s-maxage=3600" if status == 200 else "no-store"
-            elif category is not None:
-                if category not in CATEGORY_URLS.get(CATALOG_SOURCE, {}):
-                    body = {"error": "Unsupported category.", "supported_categories": list(CATEGORY_URLS.get(CATALOG_SOURCE, {}))}
                     status = 404
                     cache_control = "no-store"
                 else:
+                    catalog = _category_catalog(category, include_sockets=query.get("metadata", ["1"])[0] != "0",
+                        selected_id=query.get("socketPartId", [None])[0])
                     catalog = _category_catalog(category, include_sockets=query.get("metadata", ["1"])[0] != "0",
                         selected_id=query.get("socketPartId", [None])[0])
                     catalog = _category_catalog(category, include_sockets=query.get("metadata", ["1"])[0] != "0")
@@ -1642,6 +1666,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", cache_control)
         if status == 200 and body.get("status") == "success" and isinstance(body.get("data", {}).get("parts"), list):
+        if status == 200 and body.get("status") == "success" and isinstance(body.get("data", {}).get("parts"), list):
             ttl = _cdn_cache_seconds(body["data"])
             selected_id = query.get("socketPartId", [None])[0]
             if selected_id is not None:
@@ -1657,6 +1682,13 @@ class handler(BaseHTTPRequestHandler):
             self.send_header("Retry-After", str(retry_after))
         if status == 200 and body.get("status") == "success":
             ttl = _cdn_cache_seconds(body["data"])
+            selected_id = query.get("socketPartId", [None])[0]
+            if selected_id is not None:
+                chosen = next((p for p in body["data"]["parts"] if p["id"] == selected_id), None)
+                if not chosen or not fresh_socket(chosen, time.time()):
+                    # An unverified selected socket should not be cached for
+                    # the entire listing lifetime at the CDN layer.
+                    ttl = min(ttl, 60)
             self.send_header("Vercel-CDN-Cache-Control", "public, s-maxage={}".format(ttl) if ttl else "no-store")
         elif status != 200:
             self.send_header("Vercel-CDN-Cache-Control", "no-store")

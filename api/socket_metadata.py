@@ -182,20 +182,6 @@ MANUFACTURER_SOCKET_REFERENCES = {
         "sourceField": "CPU Socket",
         "reviewedOn": "2026-11-18",
     },
-    ("cpu", "100-100000910WOF"): {
-        "socket": "AM5",
-        "retailerUrl": "https://www.bhphotovideo.com/c/product/1753575-REG/amd_100_100000910wof_ryzen_7_7800x3d_4_2.html",
-        "sourceUrl": "https://www.amd.com/en/products/processors/desktops/ryzen/7000-series/amd-ryzen-7-7800X3d.html",
-        "sourceField": "CPU Socket",
-        "reviewedOn": "2026-11-18",
-    },
-    ("motherboard", "X870E AERO X3D WOOD"): {
-        "socket": "AM5",
-        "retailerUrl": "https://www.bhphotovideo.com/c/product/1950535-REG/gigabyte_x870e_aero_x3d_wood.html",
-        "sourceUrl": "https://www.gigabyte.com/us/Motherboard/X870E-AERO-X3D-WOOD/sp",
-        "sourceField": "CPU",
-        "reviewedOn": "2026-11-18",
-    },
     ("motherboard", "X870 EAGLE WIFI7"): {
         "socket": "AM5",
         "retailerUrl": "https://www.bhphotovideo.com/c/product/1852679-REG/gigabyte_x870_eagle_wifi7_motherboard.html",

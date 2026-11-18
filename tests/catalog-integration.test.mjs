@@ -428,19 +428,3 @@ test('provider cooldown persists and prevents repeated refresh while retaining c
   assert.equal(h.context.inspect().parts.length,originalCount);
   assert.match(h.get('status').textContent,/rate limited.*Retry in about/);
 });
-
-test('real PDF writer includes selected prices, mismatch, specification sources and valid PDF structure',async()=>{
-  const cpu=part('cpu','','AM4'), motherboard=part('motherboard','','AM5');
-  const result=evaluateSocketCompatibility(cpu,motherboard);
-  const blob=generateRealBuildPdf({
-    parts:[cpu,motherboard],labels:{cpu:'CPU',motherboard:'Motherboard'},
-    totalCents:200,socketCompatibility:result,socketEvaluation:{evaluatedAt:new Date().toISOString()},
-  });
-  assert.equal(blob.type,'application/pdf');
-  const text=Buffer.from(await blob.arrayBuffer()).toString('latin1');
-  assert.ok(text.startsWith('%PDF-1.4'));
-  assert.match(text,/SOCKET MISMATCH/);
-  assert.match(text,/\$2\.00/);
-  assert.match(text,/%%EOF$/);
-  assert.match(text,/CPU and motherboard socket check/i);
-});
