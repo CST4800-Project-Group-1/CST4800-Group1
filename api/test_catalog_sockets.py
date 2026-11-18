@@ -50,7 +50,7 @@ class SocketApiTests(unittest.TestCase):
 
     def test_verified_values_and_provenance_for_both_categories(self):
         for category in ("cpu", "motherboard"):
-            for value in (" am5 ", " lga1700 "):
+            for value in (" am4 ", " am5 ", " lga1700 "):
                 with self.subTest(category=category, value=value):
                     record = part(category)
                     record["specs"].update(extract_socket(page(value), record, NOW))
@@ -64,7 +64,7 @@ class SocketApiTests(unittest.TestCase):
                     self.assertFalse(fresh_socket(record, NOW + 3600))
 
     def test_missing_unsupported_and_malformed_socket_stay_unknown(self):
-        for value in (None, "", "AM4", "AM999", "Socket AM5", {}, ["AM5"], 42):
+        for value in (None, "", "AM999", "Socket AM5", {}, ["AM5"], 42):
             self.assertEqual(extract_socket(page(value), part(), NOW), {"socket": None, "socketProvenance": None})
 
     def test_names_features_and_unrelated_fields_are_not_evidence(self):
@@ -99,6 +99,19 @@ class SocketApiTests(unittest.TestCase):
         html = '''<div class="product_card"><a href="/c/product/123-REG/board.html"><h3>Board</h3></a>
             <div class="sku_value">BH # BOARD • MFR # X870 EAGLE WIFI7</div><span class="price_value">$199.99</span></div>'''
         self.assertEqual(catalog._parse_category(html, "motherboard")[0]["model"], "X870 EAGLE WIFI7")
+
+    def test_selected_socket_looks_up_only_the_requested_record(self):
+        records = [part(), {**part(), "id": "second", "model": "SECOND"}]
+        for record in records:
+            record["specs"] = {"feature1": "listing"}
+        with patch.dict("os.environ", {"ZENROWS_API_KEY": "test"}), \
+             patch("api.catalog._load_category", return_value=records), \
+             patch("api.catalog._enrich_sockets") as enrich:
+            headers, body = response("/api/catalog?category=cpu&socketPartId=second")
+        self.assertEqual(headers["status"], 200)
+        self.assertEqual(len(body["data"]["parts"]), 2)
+        enrich.assert_called_once()
+        self.assertEqual([item["id"] for item in enrich.call_args.args[0]], ["second"])
 
     def test_non_socket_category_does_not_fetch_specs(self):
         with patch("api.catalog._fetch_page") as fetch:
@@ -155,7 +168,7 @@ class SocketApiTests(unittest.TestCase):
                 self.assertTrue(fresh_socket(record, NOW))
 
     def test_api_missing_unsupported_or_failed_detail_is_unknown(self):
-        for detail in (page("AM4"), page(additionalProperty=[]), RuntimeError("failure")):
+        for detail in (page("AM999"), page(additionalProperty=[]), RuntimeError("failure")):
             catalog._CATEGORY_CACHE.clear()
             with patch.dict("os.environ", {"ZENROWS_API_KEY": "test"}), \
                  patch("api.catalog._parse_category", return_value=[part()]), \
