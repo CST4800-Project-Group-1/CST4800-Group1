@@ -411,3 +411,18 @@ test('provider cooldown stops the remaining category requests',async()=>{
   assert.deepEqual(requests.map(url=>url.searchParams.get('category')),['cpu','motherboard']);
   assert.equal(h.get('retry').hidden,false);
 });
+
+test('provider cooldown persists and prevents repeated refresh while retaining cached parts',async()=>{
+  const h=await setup();
+  const originalCount=h.context.inspect().parts.length;
+  h.setResponse((category,url)=>category==='cpu' && url.searchParams.get('metadata')==='0'
+    ?{httpStatus:503,error:'Retailer fetch service is rate limited.',retryAfterSeconds:55}
+    :{status:'success',data:{parts:[part(category)]}});
+  await h.context.refresh();
+  const attempted=h.requests.length;
+  assert.ok(Number(h.storage.get('buildlab-provider-cooldown-v1'))>Date.now());
+  await h.context.refresh();
+  assert.equal(h.requests.length,attempted);
+  assert.equal(h.context.inspect().parts.length,originalCount);
+  assert.match(h.get('status').textContent,/rate limited.*Retry in about/);
+});
