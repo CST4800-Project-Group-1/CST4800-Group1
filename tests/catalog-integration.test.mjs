@@ -362,6 +362,7 @@ test('SCRUM-24 retailer selection preserves socket-source identity in downloaded
   details.onclick();await new Promise(resolve=>setImmediate(resolve));
   const rows=h.get('part-dialog-content').children.find(child=>child.className==='retailer-offers').children;
   rows[1].children[1].children[1].onclick();
+  await new Promise(resolve=>setImmediate(resolve));
   const data=await h.download();
   assert.equal(data.socketCompatibility.status,'match');
   assert.equal(data.totalCents,5099);
@@ -376,10 +377,11 @@ test('SCRUM-24 retailer selection preserves socket-source identity in downloaded
 test('merged loader keeps list-first requests and bypasses browser cache for both phases', async()=>{
   const h=await setup();
   const requests=h.requests.filter(request=>request.url.startsWith('/v1/parts?'));
-  assert.equal(requests.length,9);
+  assert.equal(requests.length,7);
   assert.deepEqual(requests.slice(0,7).map(request=>new URL(request.url,'http://local').searchParams.get('category')),categories);
   for(const request of requests.slice(0,7))assert.equal(new URL(request.url,'http://local').searchParams.get('metadata'),'0');
-  assert.deepEqual(requests.slice(7).map(request=>new URL(request.url,'http://local').searchParams.get('category')),['cpu','motherboard']);
+  // With no CPU/motherboard selected, no optional detail request is made.
+  assert.equal(requests.slice(7).length,0);
   for(const request of requests)assert.equal(request.options.cache,'no-store');
 });
 
