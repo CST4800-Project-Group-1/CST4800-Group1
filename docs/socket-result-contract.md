@@ -1,5 +1,11 @@
 # CPU and motherboard socket result — preview contract
 
+Current SCRUM-22/23 implementation: see
+[the verified field/result contract](live-socket-contract-proposal.md),
+[repeatable examples](socket-examples.md) and [test evidence](scrum-22-evidence.md).
+Fresh provenance is now required, including for equal recognized socket strings.
+The remaining dated sections below describe the earlier preview and its limits.
+
 Integration checkpoint: October 14, 2026. Rule owner: Howard.
 This contract and reference rule require team review;
 no evidence of Howard's completed rule was found in the repository on October 13.

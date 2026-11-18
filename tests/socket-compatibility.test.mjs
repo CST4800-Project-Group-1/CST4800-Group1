@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {evaluateSocketCompatibility as check} from '../public/socket-compatibility.js';
-const part=(category,socket)=>({id:category,name:`Selected ${category}`,category,specs:{socket}});
+import {verifiedPart} from './fixtures/socket-parts.mjs';
+const part=(category,socket)=>{
+  const record=verifiedPart(category,socket);
+  record.specs.socket=socket;
+  return record;
+};
 test('waits when either or both selections are absent',()=>{
   for(const [cpu,board] of [[null,null],[part('cpu','AM5'),null],[null,part('motherboard','AM5')]])assert.equal(check(cpu,board).status,'waiting');
 });
@@ -27,4 +32,10 @@ test('replacing either component changes the result without cached decisions',()
   assert.equal(check(cpu,part('motherboard','LGA1700')).status,'mismatch');
   assert.equal(check(part('cpu','LGA1700'),part('motherboard','LGA1700')).status,'match');
   assert.equal(check(null,part('motherboard','LGA1700')).status,'waiting');
+});
+
+test('verified AM4 is supported and detects AM4 versus AM5 mismatch',()=>{
+  assert.equal(check(part('cpu','AM4'),part('motherboard','AM4')).status,'match');
+  assert.equal(check(part('cpu','AM4'),part('motherboard','AM5')).status,'mismatch');
+  assert.equal(check(part('cpu','AM5'),part('motherboard','AM4')).status,'mismatch');
 });

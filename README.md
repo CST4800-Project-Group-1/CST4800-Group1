@@ -55,11 +55,9 @@ g++ -std=c++17 -Wall -Wextra -Werror -pedantic backend/main.cpp backend/catalog/
 bash backend/tests/check_catalog.sh
 ```
 
-Edit the native seed and regenerate the JSON using the newly compiled executable:
-
-```bash
-/tmp/pc-parts-catalog --catalog-json > /tmp/sample_parts.json
-cp /tmp/sample_parts.json backend/data/sample_parts.json
+Regenerate the canonical JSON export after editing the seed:
+```sh
+/tmp/pc-parts-api --catalog-json > backend/data/sample_parts.json
 bash backend/tests/check_catalog.sh
 ```
 
@@ -224,3 +222,14 @@ refresh failure and socket status. Run `node --test tests/*.test.mjs`.
 The C++ source and catalog check script also follow SCRUM-16; its server reads
 backend/data/sample_parts.json. Existing frontend TypeScript work is preserved.
 No merge or deployment approval is implied.
+
+### SCRUM-22 / SCRUM-23 verified socket metadata
+
+Live CPU/motherboard socket checks support AM5 and LGA1700 only when exact-product
+specifications supply fresh provenance. Missing, unsupported, expired and failed
+refresh data stays unknown; no socket is inferred from names or feature text.
+See the [API/rule contract](docs/live-socket-contract-proposal.md),
+[repeatable examples](docs/socket-examples.md) and
+[local tests and live response evidence](docs/scrum-22-evidence.md).
+Run `python -m unittest discover -s api -p 'test_*.py'` at the repository root,
+then `npm test` and `npm run check` in `frontend/`.

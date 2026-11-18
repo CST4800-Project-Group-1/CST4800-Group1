@@ -1,0 +1,16 @@
+[
+  {"id":"verified-am5-match","cpuId":"cpu-001","motherboardId":"mb-001","expected":"match"},
+  {"id":"verified-lga1700-match","cpuId":"cpu-003","motherboardId":"mb-003","expected":"match"},
+  {"id":"mismatch-names-both-values","cpuId":"cpu-001","motherboardId":"mb-003","expected":"mismatch"},
+  {"id":"cpu-absent","cpuId":null,"motherboardId":"mb-001","expected":"waiting"},
+  {"id":"motherboard-absent","cpuId":"cpu-001","motherboardId":null,"expected":"waiting"},
+  {"id":"both-absent","cpuId":null,"motherboardId":null,"expected":"waiting"},
+  {"id":"missing-cpu-socket","cpuId":"cpu-001","motherboardId":"mb-001","cpuSocket":null,"expected":"unknown"},
+  {"id":"unsupported-equal-text","cpuId":"cpu-001","motherboardId":"mb-001","cpuSocket":"AM999","motherboardSocket":"AM999","expected":"unknown"},
+  {"id":"equal-supported-without-evidence","cpuId":"cpu-001","motherboardId":"mb-001","unverified":true,"expected":"unknown"},
+  {"id":"stale-cpu-evidence","cpuId":"cpu-001","motherboardId":"mb-001","stale":"cpu","expected":"unknown"},
+  {"id":"stale-motherboard-evidence","cpuId":"cpu-001","motherboardId":"mb-001","stale":"motherboard","expected":"unknown"},
+  {"id":"failed-refresh-after-match","cpuId":"cpu-001","motherboardId":"mb-001","refreshState":"failed","expected":"unknown"},
+  {"id":"pending-refresh","cpuId":"cpu-001","motherboardId":"mb-001","refreshState":"loading","expected":"unknown"},
+  {"id":"trim-and-uppercase","cpuId":"cpu-001","motherboardId":"mb-001","cpuSocket":" am5 ","motherboardSocket":"Am5","expected":"match"}
+]
