@@ -157,6 +157,15 @@ function renderBuild() {
   renderCompatibility();
 }
 
+function validCategoryPayload(payload, categoryName) {
+  return payload.status === 'success' && Array.isArray(payload.data?.parts)
+    && payload.data.parts.every(part => part && part.category === categoryName
+      && typeof part.id === 'string' && part.id.trim()
+      && typeof part.name === 'string' && part.name.trim()
+      && Number.isSafeInteger(part.priceCents) && part.priceCents > 0)
+    && new Set(payload.data.parts.map(part => part.id)).size === payload.data.parts.length;
+}
+
 async function load() {
   let cached = null;
   if (catalogLoading) return;
@@ -183,15 +192,11 @@ async function load() {
   const failedCategories = [];
   for (const categoryName of catalogCategories) {
     try {
-      const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}`, {cache: 'no-store'});
+      // List every category before spending provider requests on optional specs.
+      const response = await fetch(`/v1/parts?category=${encodeURIComponent(categoryName)}&metadata=0`, {cache: 'no-store'});
       if (!response.ok) throw new Error('Category request failed');
       const payload = await response.json();
-      if (payload.status !== 'success' || !Array.isArray(payload.data?.parts)
-          || !payload.data.parts.every(part => part && part.category === categoryName
-            && typeof part.id === 'string' && part.id.trim()
-            && typeof part.name === 'string' && part.name.trim()
-            && Number.isSafeInteger(part.priceCents) && part.priceCents > 0)
-          || new Set(payload.data.parts.map(part => part.id)).size !== payload.data.parts.length) {
+      if (!validCategoryPayload(payload, categoryName)) {
         throw new Error('Category response is invalid');
       }
       parts = [
@@ -227,6 +232,26 @@ async function load() {
     }
   }
 
+  for (const categoryName of ['cpu', 'motherboard']) {
+    if (!socketCategoriesReady.has(categoryName)) continue;
+    socketCategoriesReady.delete(categoryName);
+    renderCompatibility();
+    try {
+      const response = await fetch(`/v1/parts?category=${categoryName}`, {cache: 'no-store'});
+      if (!response.ok) throw new Error('Socket metadata unavailable');
+      const payload = await response.json();
+      if (!validCategoryPayload(payload, categoryName)) throw new Error('Invalid socket metadata');
+      const refreshed = new Map(payload.data.parts.map(part => [part.id, part]));
+      parts = parts.map(part => part.category === categoryName
+        ? {...part, specs: refreshed.get(part.id)?.specs || {socket:null,socketProvenance:null}}
+        : part);
+      socketCategoriesReady.add(categoryName);
+    } catch {
+      parts = parts.map(part => part.category === categoryName
+        ? {...part, specs: {...part.specs, socket:null, socketProvenance:null}} : part);
+    }
+    renderBuild();
+  }
   catalogLoading = false;
   $('refresh-catalog').disabled = false;
   renderCompatibility();
@@ -318,9 +343,25 @@ function verifiedProductUrl(source, value) {
   try {
     const url = new URL(value);
     const rule = rules[source];
-    if (rule && url.protocol === 'https:' && (url.hostname === rule[0] || url.hostname.endsWith(`.${rule[0]}`)) && rule[1].test(url.pathname)) return url.href;
+    if (rule && url.protocol === 'https:' && !url.username && !url.password && !url.port
+        && (url.hostname === rule[0] || url.hostname.endsWith(`.${rule[0]}`)) && rule[1].test(url.pathname)) return url.href;
   } catch {}
   return null;
+}
+
+function retailerSearchUrl(source, part) {
+  const searches = {
+    'B&H Photo': ['https://www.bhphotovideo.com/c/search', 'Ntt'],
+    Amazon: ['https://www.amazon.com/s', 'k'],
+    Newegg: ['https://www.newegg.com/p/pl', 'd'],
+    'Best Buy': ['https://www.bestbuy.com/site/searchpage.jsp', 'st'],
+  };
+  const search = searches[source];
+  const query = (part.model || part.name || '').trim();
+  if (!search || !query) return null;
+  const url = new URL(search[0]);
+  url.searchParams.set(search[1], query);
+  return url.href;
 }
 
 function openPartDetails(part) {
@@ -376,6 +417,10 @@ function openPartDetails(part) {
     if (entered) offer = {...offer, priceCents: entered.priceCents,
       priceIsManual: true, priceUpdatedAt: entered.priceUpdatedAt};
     const existing = retailerRows.get(offer.source);
+    const productPage = verifiedProductUrl(offer.source, offer.sourceUrl)
+      || verifiedProductUrl(offer.source, existing?.offer.sourceUrl)
+      || (offer.source === part.source ? verifiedProductUrl(part.source, part.sourceUrl) : null);
+    if (productPage) offer = {...offer, sourceUrl: productPage};
     if (existing?.offer.priceCents && !offer.priceCents && !offer.priceIsAmbiguous) {
       offer = {...existing.offer, ...offer, priceCents: existing.offer.priceCents,
         priceUpdatedAt: existing.offer.priceUpdatedAt};
@@ -384,14 +429,25 @@ function openPartDetails(part) {
     row.replaceChildren();
     const info = node('div');
     const productUrl = verifiedProductUrl(offer.source, offer.sourceUrl);
-    const link = node(productUrl ? 'a' : 'span', 'offer-store', offer.source || 'Retailer');
-    if (productUrl) {
-      link.href = productUrl;
+    const searchUrl = productUrl ? null : retailerSearchUrl(offer.source, part);
+    const destination = productUrl || searchUrl;
+    const link = node(destination ? 'a' : 'span', 'offer-store', offer.source || 'Retailer');
+    if (destination) {
+      link.href = destination;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
+      link.setAttribute('aria-label', productUrl
+        ? `Open ${offer.source} product page for ${part.name}`
+        : `Search ${offer.source} for ${part.name}`);
+    } else {
+      link.setAttribute('aria-disabled', 'true');
     }
-    const retailerMessage = offer.priceIsAmbiguous
+    const retailerMessage = searchUrl
+      ? 'Search results — confirm the exact model and current price.'
+      : offer.priceIsAmbiguous
       ? 'Multiple prices available. Check the retailer’s website and enter your chosen price.'
+      : !productUrl
+        ? offer.priceLoading ? 'Finding a matching product page…' : 'No verified product page found for this model.'
       : productUrl && !offer.priceCents
         ? 'Check the retailer’s website for current prices and available offers.'
         : offer.availability?.replaceAll('_', ' ') || 'Availability unknown';
@@ -482,7 +538,9 @@ function openPartDetails(part) {
     .then(response => { if (!response.ok) throw new Error('Links unavailable'); return response.json(); })
     .then(data => { for (const offer of data.offers || []) {
       const current = retailerRows.get(offer.source)?.offer;
-      if (!current || current.priceLoading) addOffer({...offer, priceLoading: true});
+      if (verifiedProductUrl(offer.source, offer.sourceUrl)) {
+        addOffer({...current, ...offer, priceLoading: current ? current.priceLoading === true : true});
+      }
     } })
     .catch(() => {});
   content.append(offers);
@@ -501,7 +559,16 @@ function openPartDetails(part) {
     const retailers = [...retailerRows.keys()].filter(source => source !== part.source);
     status.textContent = 'Checking retailer prices...';
     Promise.allSettled(retailers.map(source =>
-      loadRetailerPrice(source, part.model || part.name, matchName)
+      loadRetailerPrice(source, part.model || part.name, matchName).then(found => {
+        // Product links are useful immediately, even while another price is pending.
+        for (const offer of found) {
+          const current = retailerRows.get(source)?.offer;
+          if (current && verifiedProductUrl(source, offer.sourceUrl)) {
+            addOffer({...current, sourceUrl: offer.sourceUrl});
+          }
+        }
+        return found;
+      })
     )).then(results => {
       // Commit the complete batch in one render turn so rows finish together.
       results.forEach((result, index) => {

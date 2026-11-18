@@ -49,3 +49,17 @@ No new live retailer request was made. The dependency's historical live capture
 is tested at its recorded time and must evaluate unknown after expiry.
 A hosted Vercel preview and Jira posting require the existing project/session
 access; do not treat local QA as a deployed preview or independent approval.
+
+
+## November 18 conflict resolution
+
+Merged the latest SCRUM-22 branch (0c7bdf9) into SCRUM-24. The category loader
+keeps both list-first metadata=0 requests and cache: no-store; optional CPU and
+motherboard metadata requests also bypass browser cache. Provider rate limits,
+clickable retailer links and labeled search fallbacks remain intact. SCRUM-24's
+single display/export evaluation, refresh button, timestamps and source URLs
+remain intact.
+
+Validation: 49 root Node tests, 11 frontend Node tests, 49 Python tests,
+TypeScript noEmit check and build passed. A regression test verifies all seven
+listing requests precede both metadata requests and both phases bypass cache.

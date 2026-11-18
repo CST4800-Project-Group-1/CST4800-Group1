@@ -8,6 +8,8 @@ import os
 import re
 import threading
 import time
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 from concurrent.futures import Future, ThreadPoolExecutor
 from html import unescape
 from html.parser import HTMLParser
@@ -22,6 +24,16 @@ ZENROWS_ENDPOINT = "https://api.zenrows.com/v1/"
 CACHE_SECONDS = 3600
 MAX_PRODUCTS_PER_CATEGORY = 25
 REQUEST_TIMEOUT_SECONDS = 25
+SOCKET_DETAIL_LIMIT = 3
+_FETCH_LOCK = threading.Lock()
+_PROVIDER_RETRY_AT = 0.0
+_NEXT_FETCH_AT = 0.0
+
+
+class ProviderRateLimited(RuntimeError):
+    def __init__(self, retry_after=60):
+        self.retry_after = max(1, min(3600, retry_after))
+        super().__init__("Retailer fetch service is rate limited. Please retry later.")
 
 # Retailer listing pages for the seven categories used by the UI.
 # The catalog parser currently supports B&H; offers.py uses the retailer search URLs.
@@ -398,6 +410,30 @@ def _parse_category(html, category, source=None):
     return parts
 
 def _fetch_page(url, api_key, js_render=False, options=None, timeout=None):
+    global _PROVIDER_RETRY_AT, _NEXT_FETCH_AT
+    started = time.monotonic()
+    # Includes offers: optional requests must not exhaust account concurrency.
+    with _FETCH_LOCK:
+        now = time.monotonic()
+        if now < _PROVIDER_RETRY_AT:
+            raise ProviderRateLimited(int(_PROVIDER_RETRY_AT - now) + 1)
+        delay = max(0, _NEXT_FETCH_AT - now)
+        if delay:
+            time.sleep(delay)
+        if timeout is not None:
+            timeout -= time.monotonic() - started
+            if timeout <= 0:
+                raise RuntimeError("Retailer request budget expired while waiting for the provider.")
+        try:
+            return _fetch_page_uncached(url, api_key, js_render, options, timeout)
+        except ProviderRateLimited as error:
+            _PROVIDER_RETRY_AT = time.monotonic() + error.retry_after
+            raise
+        finally:
+            _NEXT_FETCH_AT = time.monotonic() + 0.25
+
+
+def _fetch_page_uncached(url, api_key, js_render=False, options=None, timeout=None):
     params = {"apikey": api_key, "url": url}
     if js_render:
         params["js_render"] = "true"
@@ -410,12 +446,24 @@ def _fetch_page(url, api_key, js_render=False, options=None, timeout=None):
         with urlopen(request, timeout=timeout or (20 if options else REQUEST_TIMEOUT_SECONDS)) as response:
             return response.read().decode("utf-8", "replace")
     except HTTPError as error:
+        if error.code == 429:
+            retry = error.headers.get("Retry-After", "60") if error.headers else "60"
+            try:
+                retry = int(retry)
+            except (ValueError, TypeError):
+                try:
+                    retry = max(1, int(parsedate_to_datetime(retry).timestamp() - time.time()))
+                except (ValueError, TypeError, OverflowError):
+                    retry = 60
+            error.close()
+            # Rate limits are not evidence that JavaScript rendering is needed.
+            raise ProviderRateLimited(retry) from None
         detail = error.read(512).decode("utf-8", "replace")
+        error.close()
         if not (js_render or params.get("js_render") == "true") and (
-            error.code == 429
-            or (error.code in (400, 422) and any(
+            error.code in (400, 422) and any(
                 marker in detail for marker in ("RESP001", "REQS002")
-            ))
+            )
         ):
             return None
         raise RuntimeError("ZenRows could not fetch a retailer page (HTTP {}).".format(error.code)) from None
@@ -439,24 +487,24 @@ def _enrich_sockets(parts, api_key):
             if remaining <= 0:
                 return
             html = _fetch_page(url, api_key, timeout=min(8, remaining))
-            remaining = deadline - time.monotonic()
-            if not html and remaining > 0:
-                html = _fetch_page(url, api_key, timeout=min(8, remaining), options={
-                    "js_render": "true", "wait_for": '[data-selenium="specsItemGroupTableRow"]',
-                })
             # If the budget was exceeded, do not establish fresh compatibility.
             if html and time.monotonic() <= deadline:
                 part["specs"].update(extract_socket(html, part, time.time()))
         except (RuntimeError, ValueError, TypeError):
             return
 
-    if any(part.get("category") in SOCKET_CATEGORIES for part in parts):
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            list(pool.map(enrich, parts))
+    for part in parts:
+        if part.get("category") in SOCKET_CATEGORIES:
+            part["specs"].update(socket=None, socketProvenance=None)
+    # No request per card and no rendered retry for optional specifications.
+    for part in [part for part in parts if part.get("category") in SOCKET_CATEGORIES][:SOCKET_DETAIL_LIMIT]:
+        enrich(part)
+        if time.monotonic() < _PROVIDER_RETRY_AT:
+            break
     return parts
 
 
-def _load_category(category, url, api_key):
+def _load_category(category, url, api_key, include_sockets=True):
     adapter = RETAILERS.get(CATALOG_SOURCE, {})
     parsers = {"bh": _parse_category}
     parser = parsers.get(adapter.get("catalog_parser"))
@@ -466,6 +514,8 @@ def _load_category(category, url, api_key):
     try:
         try:
             html = _fetch_page(url, api_key)
+        except ProviderRateLimited:
+            raise
         except RuntimeError:
             # A failed plain response may still have a usable rendered listing.
             html = None
@@ -473,28 +523,37 @@ def _load_category(category, url, api_key):
         if not parts:
             html = _fetch_page(url, api_key, js_render=True)
             parts = parser(html, category) if html else []
+    except ProviderRateLimited:
+        raise
     except RuntimeError as error:
         raise RuntimeError(category + ": " + str(error)) from None
     if not parts:
         raise RuntimeError("No catalog products were parsed for category: " + category)
-    return _enrich_sockets(parts, api_key)
+    return _enrich_sockets(parts, api_key) if include_sockets else parts
 
 
-def _category_catalog(category):
+def _category_catalog(category, include_sockets=True):
+    cache_key = category if include_sockets else (category, "listing")
     now = time.time()
-    cached = _CATEGORY_CACHE.get(category)
+    cached = _CATEGORY_CACHE.get(cache_key)
     if cached and now < cached["expires"]:
         return public_catalog(cached["catalog"], now)
 
     with _CATEGORY_CACHE_LOCK:
         now = time.time()
-        cached = _CATEGORY_CACHE.get(category)
+        cached = _CATEGORY_CACHE.get(cache_key)
         if cached and now < cached["expires"]:
             return public_catalog(cached["catalog"], now)
         api_key = os.environ.get("ZENROWS_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError("ZENROWS_API_KEY is not configured.")
-        parts = _load_category(category, CATEGORY_URLS[CATALOG_SOURCE][category], api_key)
+        listing = _CATEGORY_CACHE.get((category, "listing"))
+        if include_sockets and listing and now < listing["expires"]:
+            catalog = public_catalog(listing["catalog"], now)
+            _enrich_sockets(catalog["parts"], api_key)
+            _CATEGORY_CACHE[cache_key] = {"expires": listing["expires"], "catalog": catalog}
+            return public_catalog(catalog, time.time())
+        parts = _load_category(category, CATEGORY_URLS[CATALOG_SOURCE][category], api_key, include_sockets=include_sockets)
         catalog = {
             "schemaVersion": 1,
             "isSampleData": False,
@@ -502,7 +561,7 @@ def _category_catalog(category):
             "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "parts": parts,
         }
-        _CATEGORY_CACHE[category] = {"expires": time.time() + CACHE_SECONDS, "catalog": catalog}
+        _CATEGORY_CACHE[cache_key] = {"expires": time.time() + CACHE_SECONDS, "catalog": catalog}
         return public_catalog(catalog, time.time())
 
 
@@ -715,16 +774,19 @@ def _lookup(store, model, key, name=""):
         if remaining <= 0:
             raise RuntimeError("Retailer lookup exceeded its time budget.")
         return _fetch_page(url, key, options=RETAILERS[store].get("fetch_options"), timeout=remaining)
-    confirmed_url = RETAILERS[store].get("product_urls", {}).get(model.upper())
-    if confirmed_url:
+    def read_product(url):
         try:
-            html = fetch_retailer(confirmed_url)
+            html = fetch_retailer(url)
             if html:
-                return [_direct_product_offer(html, store, model, confirmed_url)]
+                return [_direct_product_offer(html, store, model, url)]
         except RuntimeError:
             pass
-        return [{"source": store, "sourceUrl": confirmed_url,
-                 "availability": "Price lookup unavailable; enter the retailer price"}]
+        # A blocked price request does not invalidate an already matched URL.
+        return [{"source": store, "sourceUrl": url,
+                 "availability": "Product page matched; enter the current retailer price"}]
+    confirmed_url = RETAILERS[store].get("product_urls", {}).get(model.upper())
+    if confirmed_url:
+        return read_product(confirmed_url)
     search = next(iter(CATEGORY_URLS[store].values()))
     domain = urlsplit(search).hostname.removeprefix("www.")
     try:
@@ -768,12 +830,10 @@ def _lookup(store, model, key, name=""):
                 return [{'source': store, 'sourceUrl': results[0]['sourceUrl'],
                          'priceIsAmbiguous': True,
                          'availability': 'Multiple seller prices; enter the price of your chosen offer'}]
-            detail = fetch_retailer(results[0]['sourceUrl'])
-            return [_direct_product_offer(detail, store, model, results[0]['sourceUrl'])] if detail else []
+            return read_product(results[0]['sourceUrl'])
         link = _product_link_from_html(html, store, model, name or model)
         if link:
-            detail = fetch_retailer(link['sourceUrl'])
-            return [_direct_product_offer(detail, store, model, link['sourceUrl'])] if detail else [link]
+            return read_product(link['sourceUrl'])
         return []
     except Exception:
         return []
@@ -824,8 +884,26 @@ def _get_offers(model, name="", store=None):
         groups = list(pool.map(lambda retailer: _cached_lookup(retailer, model, key, name), stores))
     return 200, {"offers": [offer for group in groups for offer in group]}
 
+def _cdn_cache_seconds(catalog):
+    """Never let a shared response outlive its prices or verified sockets."""
+    now = time.time()
+    try:
+        generated = datetime.fromisoformat(catalog["generatedAt"].replace("Z", "+00:00")).timestamp()
+        if generated > now:
+            return 0
+        remaining = generated + CACHE_SECONDS - now
+        for part in catalog.get("parts", []):
+            if part.get("category") in SOCKET_CATEGORIES and part.get("specs", {}).get("socket"):
+                expires = part["specs"]["socketProvenance"]["expiresAt"]
+                remaining = min(remaining, datetime.fromisoformat(expires.replace("Z", "+00:00")).timestamp() - now)
+        return max(0, int(remaining) - 2)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return 0
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        retry_after = None
         try:
             query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
             category = query.get("category", [None])[0]
@@ -844,7 +922,7 @@ class handler(BaseHTTPRequestHandler):
                     status = 404
                     cache_control = "no-store"
                 else:
-                    catalog = _category_catalog(category)
+                    catalog = _category_catalog(category, include_sockets=query.get("metadata", ["1"])[0] != "0")
                     body = {"status": "success", "data": catalog}
                     status = 200
                     cache_control = "no-store"
@@ -853,6 +931,11 @@ class handler(BaseHTTPRequestHandler):
                 body = {"status": "success", "data": catalog}
                 status = 200
                 cache_control = "no-store"
+        except ProviderRateLimited as error:
+            retry_after = error.retry_after
+            body = {"error": str(error), "retryAfterSeconds": retry_after}
+            status = 503
+            cache_control = "no-store"
         except RuntimeError as error:
             body = {"error": str(error)}
             status = 503
@@ -862,6 +945,13 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", cache_control)
+        if status == 200 and body.get("status") == "success":
+            ttl = _cdn_cache_seconds(body["data"])
+            self.send_header("Vercel-CDN-Cache-Control", "public, s-maxage={}".format(ttl) if ttl else "no-store")
+        elif status != 200:
+            self.send_header("Vercel-CDN-Cache-Control", "no-store")
+        if retry_after is not None:
+            self.send_header("Retry-After", str(retry_after))
         self.end_headers()
         self.wfile.write(payload)
 

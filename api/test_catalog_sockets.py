@@ -123,12 +123,13 @@ class SocketApiTests(unittest.TestCase):
         self.assertIsNone(record["specs"]["socketProvenance"])
         self.assertEqual(record["priceCents"], 19999)
 
-    def test_empty_detail_retries_rendered_page_within_budget(self):
+    def test_empty_optional_detail_does_not_retry_rendered_page(self):
         record = part()
-        with patch("api.catalog._fetch_page", side_effect=[None, page()]) as fetch:
+        with patch("api.catalog._fetch_page", return_value=None) as fetch:
             catalog._enrich_sockets([record], "test")
-        self.assertEqual(record["specs"]["socket"], "AM5")
-        self.assertEqual(fetch.call_args.kwargs["options"]["js_render"], "true")
+        self.assertIsNone(record["specs"]["socket"])
+        fetch.assert_called_once()
+        self.assertNotIn("options", fetch.call_args.kwargs)
         self.assertLessEqual(fetch.call_args.kwargs["timeout"], 8)
 
     def test_exceeded_budget_cannot_establish_compatibility(self):
