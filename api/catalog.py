@@ -19,7 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-from api.socket_metadata import SOCKET_CATEGORIES, canonical_url, extract_socket, fresh_socket, public_catalog
+from api.socket_metadata import SOCKET_CATEGORIES, canonical_url, extract_socket, fresh_socket, manufacturer_reference, public_catalog
 
 ZENROWS_ENDPOINT = "https://api.zenrows.com/v1/"
 CACHE_SECONDS = 3600
@@ -949,7 +949,22 @@ class handler(BaseHTTPRequestHandler):
         try:
             query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
             category = query.get("category", [None])[0]
-            if query.get("links", [""])[0] == "1":
+            if query.get("socketReference", [""])[0] == "1":
+                # Static, manufacturer-reviewed specs do not require ZenRows or
+                # a fresh catalog listing. Unknown models remain unknown.
+                part_id = query.get("socketPartId", [""])[0]
+                model = query.get("socketModel", [""])[0]
+                source_url = query.get("sourceUrl", [""])[0]
+                if (category not in SOCKET_CATEGORIES or not part_id or len(part_id) > 200
+                        or not model or len(model) > 200):
+                    status, body = 400, {"error": "A selected CPU or motherboard and its exact model are required."}
+                else:
+                    status, body = 200, {"status": "success", "data": {
+                        "id": part_id, "category": category, "model": model,
+                        "specs": manufacturer_reference(category, model, source_url),
+                    }}
+                cache_control = "no-store"
+            elif query.get("links", [""])[0] == "1":
                 urls = _confirmed_product_urls(query.get("model", [""])[0], query.get("sourceUrl", [""])[0])
                 status, body = 200, {"offers": [{"source": store, "sourceUrl": url,
                     "availability": "Matched manufacturer model; confirm current price at retailer"}
@@ -988,7 +1003,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", cache_control)
-        if status == 200 and body.get("status") == "success":
+        if status == 200 and body.get("status") == "success" and isinstance(body.get("data", {}).get("parts"), list):
             ttl = _cdn_cache_seconds(body["data"])
             selected_id = query.get("socketPartId", [None])[0]
             if selected_id is not None:
