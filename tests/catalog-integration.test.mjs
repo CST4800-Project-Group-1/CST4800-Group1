@@ -22,7 +22,7 @@ async function setup() {
     clearTimeout:id=>timers.delete(id),
     localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},Intl,Blob,console,Set,JSON,
     URL:class extends URL {static createObjectURL(blob){exported=blob;return 'blob:test'} static revokeObjectURL(){}},
-    fetch:async (url, options) => {requests.push({url,options});const category=new URL(url,'http://local').searchParams.get('category');const data=respond(category,new URL(url,'http://local'));return data===null?{ok:false}:{ok:true,json:async()=>data}}};
+    fetch:async (url, options) => {requests.push({url,options});const category=new URL(url,'http://local').searchParams.get('category');const data=respond(category,new URL(url,'http://local'));return data===null?{ok:false}:{ok:data?.httpStatus===undefined,status:data?.httpStatus||200,json:async()=>data}}};
   vm.createContext(context);
   vm.runInContext(source+'\n globalThis.inspect = () => ({parts,build,isSampleData}); globalThis.refresh=load;',context);
   await new Promise(resolve=>setImmediate(resolve));
@@ -381,4 +381,31 @@ test('merged loader keeps list-first requests and bypasses browser cache for bot
   for(const request of requests.slice(0,7))assert.equal(new URL(request.url,'http://local').searchParams.get('metadata'),'0');
   assert.deepEqual(requests.slice(7).map(request=>new URL(request.url,'http://local').searchParams.get('category')),['cpu','motherboard']);
   for(const request of requests)assert.equal(request.options.cache,'no-store');
+});
+
+test('selected fourth CPU and motherboard are enriched, not merely first three',async()=>{
+  const h=await setup();
+  h.setResponse(category=>({status:'success',data:{parts:[
+    part(category),part(category,'-2','LGA1700'),part(category,'-3','AM4'),part(category,'-4','AM4'),
+  ]}}));
+  await h.context.refresh();
+  await h.add('cpu-4');
+  await h.add('motherboard-4');
+  assert.equal(h.get('socket-compatibility').dataset.state,'match');
+  const targeted=h.requests.map(item=>new URL(item.url,'http://local'))
+    .filter(url=>url.searchParams.has('socketPartId'));
+  assert.ok(targeted.some(url=>url.searchParams.get('socketPartId')==='cpu-4'));
+  assert.ok(targeted.some(url=>url.searchParams.get('socketPartId')==='motherboard-4'));
+});
+
+test('provider cooldown stops the remaining category requests',async()=>{
+  const h=await setup();
+  const before=h.requests.length;
+  h.setResponse((category,url)=>category==='motherboard' && url.searchParams.get('metadata')==='0'
+    ?{httpStatus:503,error:'Retailer fetch service is rate limited.',retryAfterSeconds:55}
+    :{status:'success',data:{parts:[part(category)]}});
+  await h.context.refresh();
+  const requests=h.requests.slice(before).map(item=>new URL(item.url,'http://local'));
+  assert.deepEqual(requests.map(url=>url.searchParams.get('category')),['cpu','motherboard']);
+  assert.equal(h.get('retry').hidden,false);
 });
