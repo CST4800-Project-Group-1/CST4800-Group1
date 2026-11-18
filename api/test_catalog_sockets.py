@@ -100,6 +100,24 @@ class SocketApiTests(unittest.TestCase):
             <div class="sku_value">BH # BOARD • MFR # X870 EAGLE WIFI7</div><span class="price_value">$199.99</span></div>'''
         self.assertEqual(catalog._parse_category(html, "motherboard")[0]["model"], "X870 EAGLE WIFI7")
 
+    def test_exact_bh_specification_table_fallback(self):
+        for category, socket in (("cpu", "AM4"), ("motherboard", "AM5")):
+            record = part(category)
+            html = ('<h1>Exact product page</h1><div>BH #123 • MFR #EXACT-123</div>'
+                    '<h2>Specifications</h2><table>'
+                    '<tr><th>CPU Socket</th><td>' + socket + '</td></tr></table>')
+            result = extract_socket(html, record, NOW)
+            self.assertEqual(result["socket"], socket)
+            self.assertEqual(result["socketProvenance"]["sourceField"], "CPU Socket")
+            self.assertTrue(fresh_socket({**record, "specs": result}, NOW))
+            # Page-title, unlabelled marketing bullet and wrong MFR cannot
+            # establish verification, even when a supported socket appears.
+            self.assertIsNone(extract_socket(html.replace("MFR #EXACT-123", "MFR #OTHER"),
+                                               record, NOW)["socket"])
+            self.assertIsNone(extract_socket(
+                '<div>MFR #EXACT-123</div><p>Socket ' + socket + '</p>',
+                record, NOW)["socket"])
+
     def test_selected_socket_looks_up_only_the_requested_record(self):
         records = [part(), {**part(), "id": "second", "model": "SECOND"}]
         for record in records:
