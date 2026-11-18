@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {evaluateSocketCompatibility} from '../public/socket-compatibility.js';
+import {createBuildPdf as generateRealBuildPdf} from '../public/build-pdf.js';
 import {verifiedPart} from './fixtures/socket-parts.mjs';
 
 const categories = ['cpu','motherboard','graphics_card','ram','storage','power_supply','case'];
 const part = (category, suffix = '', socket = 'AM5') => ({...verifiedPart(category,socket,Date.now(),suffix),name:category+suffix,manufacturer:'Example',priceCents:100});
-const source = readFileSync(new URL('../public/app.js',import.meta.url),'utf8').replace(/^import [^\r\n]*\r?\n/,'');
+const source = readFileSync(new URL('../public/app.js',import.meta.url),'utf8').replace(/^import [^\r\n]*\r?\n/gm,'');
 async function setup() {
   const elements = new Map(), storage = new Map();
   const timers = new Map();
@@ -17,7 +18,7 @@ async function setup() {
   const get = id => {if(!elements.has(id)) elements.set(id,el()); return elements.get(id)};
   let respond = category => ({status:'success',data:{isSampleData:false,parts:[part(category),part(category,'-2','LGA1700')]}});
   let exported;
-  const context = {evaluateSocketCompatibility, document:{getElementById:get,createElement:el},
+  const context = {evaluateSocketCompatibility, createBuildPdf: args => new Blob([JSON.stringify({...args, compatibilityChecked:false})], {type:'application/json'}), document:{getElementById:get,createElement:el},
     setTimeout:(callback,delay)=>{timers.set(++timerId,{callback,delay});return timerId},
     clearTimeout:id=>timers.delete(id),
     localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},Intl,Blob,console,Set,JSON,
@@ -425,4 +426,20 @@ test('provider cooldown persists and prevents repeated refresh while retaining c
   assert.equal(h.requests.length,attempted);
   assert.equal(h.context.inspect().parts.length,originalCount);
   assert.match(h.get('status').textContent,/rate limited.*Retry in about/);
+});
+
+test('real PDF writer includes selected prices, mismatch, specification sources and valid PDF structure',async()=>{
+  const cpu=part('cpu','','AM4'), motherboard=part('motherboard','','AM5');
+  const result=evaluateSocketCompatibility(cpu,motherboard);
+  const blob=generateRealBuildPdf({
+    parts:[cpu,motherboard],labels:{cpu:'CPU',motherboard:'Motherboard'},
+    totalCents:200,socketCompatibility:result,socketEvaluation:{evaluatedAt:new Date().toISOString()},
+  });
+  assert.equal(blob.type,'application/pdf');
+  const text=Buffer.from(await blob.arrayBuffer()).toString('latin1');
+  assert.ok(text.startsWith('%PDF-1.4'));
+  assert.match(text,/SOCKET MISMATCH/);
+  assert.match(text,/\$2\.00/);
+  assert.match(text,/%%EOF$/);
+  assert.match(text,/CPU and motherboard socket check/i);
 });
