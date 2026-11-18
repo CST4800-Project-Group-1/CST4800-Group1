@@ -23,12 +23,15 @@ jobs:
           python-version: '3.12'
       - name: Python catalog and socket regression tests
         run: python -B -m unittest api.test_catalog_prices api.test_catalog_sockets api.test_catalog_rate_limits
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - if: always()
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
       - name: Install frontend packages
+        if: always()
         working-directory: frontend
         run: npm ci
       - name: Frontend and socket tests
+        if: always()
         working-directory: frontend
         run: npm test
