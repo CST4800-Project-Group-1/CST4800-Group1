@@ -54,6 +54,6 @@ The suites cover CPU/motherboard refresh failure, missing/unsupported/malformed/
 
 1. Vlad records the production URL and exact deployment commit in SCRUM-18 / this ticket.
 2. Review this QA evidence PR and resolve comments. Since I authored this PR, I cannot submit a GitHub approval of my own work; the required independent-review arrangement must be explicitly recorded before closure.
-3. Keep SCRUM-17 in Testing until the review requirement and deployment evidence are satisfied. No duplicate ticket is needed.
+3. PM closure decision: SCRUM-17 is Done for the completed QA execution. The outstanding production commit, PR review and independent-review arrangement are explicitly tracked on the existing SCRUM-21 parent, which remains open. This changes the QA closure scope; it does not claim that the original review gate was met, that this PR was approved/merged, or that the release was accepted. No duplicate ticket is needed.
 
 Full build compatibility and 3D work remain outside this QA sign-off.
