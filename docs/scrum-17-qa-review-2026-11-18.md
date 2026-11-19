@@ -35,7 +35,7 @@ Two actual disk downloads were inspected, not just a generated Blob:
 - Unknown pair report: two pages; $178.55 and $451, $629.55 total, NOT VERIFIED, CPU Not verified / motherboard AM5, and the unknown explanation matching the page.
 - Both explicitly warn that socket results do not verify BIOS support or full-build compatibility.
 - The current export is PDF. Older JSON-only acceptance wording needs to be read against the current format; no new JSON export pass is claimed.
-- Text and link contents were inspected. PDF visual rendering review is recorded separately only if completed.
+- Text and link contents were inspected. Both pages of the matching-pair PDF were rendered with macOS PDFKit and visually checked: readable text, correct prices, source links and caveats; no clipped or overlapping content was observed.
 
 ## Repeatable controlled regression checks
 
